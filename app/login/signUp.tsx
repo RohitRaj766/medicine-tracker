@@ -1,5 +1,6 @@
 import { Auth } from '@/config/FirebaseConfig';
 import Colors from '@/constant/Colors';
+import { setLocalStorage } from '@/service/Storage';
 import { useRouter } from 'expo-router';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import React, { useState } from 'react';
@@ -25,8 +26,10 @@ export default function signUp() {
             await updateProfile(user,{
                 displayName:name
             })
-           console.log(user)
-           router.push("/(tabs)")
+            console.log(user)
+            // Store only the necessary user details as a string
+          await setLocalStorage('userDetails', user)    
+            router.push("/(tabs)")
         } catch (error: any) {
             // Handle Errors here.
             const errorCode = error.code;

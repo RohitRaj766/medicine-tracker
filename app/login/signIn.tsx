@@ -1,9 +1,10 @@
+import { Auth } from '@/config/FirebaseConfig'
 import Colors from '@/constant/Colors'
+import { setLocalStorage } from '@/service/Storage'
 import { useRouter } from 'expo-router'
+import { signInWithEmailAndPassword } from 'firebase/auth'
 import React, { useState } from 'react'
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
-import { signInWithEmailAndPassword } from 'firebase/auth'
-import { Auth } from '@/config/FirebaseConfig'
 
 export default function SignIn() {
     const router = useRouter()
@@ -16,9 +17,11 @@ export default function SignIn() {
             return
 
         }
-        signInWithEmailAndPassword(Auth,email,password).then((useCredential)=>{
-            const user = useCredential.user
-            console.log("Users ::: ", user)
+        signInWithEmailAndPassword(Auth,email,password).then(async(useCredential)=>{
+            const user = useCredential.user;
+            console.log("Users ::: ", user);
+            // Store only serializable user details, not the whole user object
+       await setLocalStorage('userDetails', user);
             router.replace("/(tabs)")
         }).catch((error)=>{
             const errorCode = error.code;
