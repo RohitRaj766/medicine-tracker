@@ -1,9 +1,32 @@
-import { View, Text } from 'react-native'
-import React from 'react'
-import { Tabs } from 'expo-router'
+import React, { useEffect, useState } from 'react'
+import { Tabs, useRouter } from 'expo-router'
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { onAuthStateChanged } from 'firebase/auth';
+import { Auth } from '@/config/FirebaseConfig';
 
 export default function _layout() {
+  
+  const router = useRouter();
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+
+  onAuthStateChanged(Auth, (user) => {
+    if (user) {
+      const uid = user.uid;
+      setAuthenticated(true);
+    } else {
+      setAuthenticated(false)
+      router?.push('/login')
+    }
+  })
+
+  useEffect(()=>{
+      if(authenticated==false){
+        router?.push('/login')
+      }
+
+  },[authenticated])
+
+
   return (
     <Tabs screenOptions={{
         headerShown: false,
