@@ -1,9 +1,25 @@
-import { View, Text } from 'react-native'
-import React from 'react'
-import { Tabs } from 'expo-router'
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { Tabs, useRouter } from 'expo-router';
+import React, { useEffect } from 'react';
+
+import { getLocalStorage } from '@/service/Storage';
 
 export default function _layout() {
+  
+  const router = useRouter();
+
+  useEffect(()=>{
+    getUserDetails();
+  },[])
+
+  const getUserDetails = async () => {
+    const userInfo = await getLocalStorage('userDetails');
+    if(!userInfo){
+      router.replace('/login')
+    }
+    return userInfo;
+  }
+
   return (
     <Tabs screenOptions={{
         headerShown: false,

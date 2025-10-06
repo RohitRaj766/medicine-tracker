@@ -1,22 +1,51 @@
+import { Auth } from '@/config/FirebaseConfig'
 import Colors from '@/constant/Colors'
-import React from 'react'
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { setLocalStorage } from '@/service/Storage'
 import { useRouter } from 'expo-router'
+import { signInWithEmailAndPassword } from 'firebase/auth'
+import React, { useState } from 'react'
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+
 export default function SignIn() {
     const router = useRouter()
+    const [email, setEmail] = useState('')
+    const [password, setPassword] = useState('')
+    const OnSignInClick=()=>{
+
+        if(!email || !password){
+            Alert.alert("Please fill all details")
+            return
+
+        }
+        signInWithEmailAndPassword(Auth,email,password).then(async(useCredential)=>{
+            const user = useCredential.user;
+            console.log("Users ::: ", user);
+            // Store only serializable user details, not the whole user object
+       await setLocalStorage('userDetails', user);
+            router.replace("/(tabs)")
+        }).catch((error)=>{
+            const errorCode = error.code;
+            const errorMessage = error.message;
+            if(error=='auth/invalid-credential'){
+
+                console.log(errorCode, errorMessage)
+                Alert.alert("Invalid email or password")
+            }
+        })
+    }
   return (
     <View style={styles?.container}>
       <Text style={styles?.textArea}>Let's Sing In</Text>
 
     <View style={styles?.inputContainer}>
         <Text style={styles?.inputLable}> Email </Text>
-        <TextInput placeholder='jhondoe@gmail.com' style={styles?.textinput} />
+        <TextInput placeholder='jhondoe@gmail.com' style={styles?.textinput} onChangeText={(text)=>{setEmail(text)}}/>
     </View>
 
     <View style={styles?.inputContainer2} >
         <Text style={styles?.inputLable}> Password </Text>
-        <TextInput placeholder='enter your password' style={styles?.textinput} secureTextEntry={true}/>
-        <TouchableOpacity style={styles?.loginButton}>
+        <TextInput placeholder='enter your password' style={styles?.textinput} secureTextEntry={true} onChangeText={(text)=>{setPassword(text)}}/>
+        <TouchableOpacity style={styles?.loginButton} onPress={OnSignInClick}>
             <Text style={styles?.loginButtonText}>Login</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles?.createButton} onPress={() => router.push('/login/signUp')}>
@@ -54,9 +83,7 @@ const styles = StyleSheet.create({
       color: 'black',
       marginTop:20,
     },
- 
-  
-   
+
    textinput:{
         marginTop:10,
         padding:10,
@@ -85,7 +112,7 @@ const styles = StyleSheet.create({
         marginTop:30,
         borderRadius:5,
         borderWidth:1,
-        borderBlockColor:Colors.PRIMARY,
+        borderColor:Colors.PRIMARY,
        },
        createButtonText:{
         color:Colors.PRIMARY,
