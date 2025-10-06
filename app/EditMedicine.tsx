@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react'
 import {
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -22,6 +23,7 @@ export default function EditMedicine() {
   
   const [medicineName, setMedicineName] = useState('')
   const [dosage, setDosage] = useState('')
+  const [medicineType, setMedicineType] = useState('')
   const [frequency, setFrequency] = useState('')
   const [duration, setDuration] = useState('')
   const [startDate, setStartDate] = useState(new Date())
@@ -36,6 +38,123 @@ export default function EditMedicine() {
   const [selectedTime, setSelectedTime] = useState(new Date())
   const [hasSelectedTime, setHasSelectedTime] = useState(false)
   const [editingMedicineId, setEditingMedicineId] = useState<string | null>(null)
+  
+  // New states for enhanced features
+  const [showDosageModal, setShowDosageModal] = useState(false)
+  const [showMedicineTypeModal, setShowMedicineTypeModal] = useState(false)
+  const [showFrequencyModal, setShowFrequencyModal] = useState(false)
+  const [showMedicineNameModal, setShowMedicineNameModal] = useState(false)
+  const [selectedTimes, setSelectedTimes] = useState<Date[]>([])
+  const [frequencyCount, setFrequencyCount] = useState(1)
+  const [medicineSearchText, setMedicineSearchText] = useState('')
+  const [medicineTypeSearchText, setMedicineTypeSearchText] = useState('')
+  const [dosageSearchText, setDosageSearchText] = useState('')
+  const [currentDoseIndex, setCurrentDoseIndex] = useState(0)
+  const [showDoseSelector, setShowDoseSelector] = useState(false)
+
+  // Ensure only one overlay/modal is active at a time
+  const closeAllModals = () => {
+    try {
+      setShowFrequencyModal(false)
+      setShowMedicineTypeModal(false)
+      setShowMedicineNameModal(false)
+      setShowDosageModal(false)
+      setShowDoseSelector(false)
+      setShowTimePicker(false)
+      setShowStartDatePicker(false)
+      setShowEndDatePicker(false)
+    } catch {}
+  }
+
+  // Comprehensive Medicine Dictionary
+  const medicineDictionary = [
+    // Pain Relief & Fever
+    'Paracetamol', 'Acetaminophen', 'Aspirin', 'Ibuprofen', 'Naproxen', 'Diclofenac', 'Meloxicam', 'Celecoxib',
+    'Tramadol', 'Morphine', 'Codeine', 'Oxycodone', 'Hydrocodone', 'Fentanyl',
+    
+    // Antibiotics
+    'Amoxicillin', 'Azithromycin', 'Cephalexin', 'Ciprofloxacin', 'Doxycycline', 'Levofloxacin', 'Metronidazole',
+    'Penicillin', 'Tetracycline', 'Trimethoprim', 'Sulfamethoxazole', 'Clindamycin', 'Vancomycin',
+    
+    // Cardiovascular
+    'Atorvastatin', 'Simvastatin', 'Lisinopril', 'Metoprolol', 'Amlodipine', 'Losartan', 'Valsartan',
+    'Carvedilol', 'Digoxin', 'Warfarin', 'Aspirin', 'Clopidogrel', 'Nitroglycerin',
+    
+    // Diabetes
+    'Metformin', 'Insulin', 'Glipizide', 'Glyburide', 'Pioglitazone', 'Sitagliptin', 'Canagliflozin',
+    'Empagliflozin', 'Dapagliflozin', 'Liraglutide', 'Semaglutide',
+    
+    // Gastrointestinal
+    'Omeprazole', 'Lansoprazole', 'Pantoprazole', 'Ranitidine', 'Famotidine', 'Metoclopramide',
+    'Ondansetron', 'Loperamide', 'Senna', 'Bisacodyl', 'Lactulose', 'Polyethylene Glycol',
+    
+    // Respiratory
+    'Albuterol', 'Salmeterol', 'Fluticasone', 'Budesonide', 'Montelukast', 'Theophylline',
+    'Prednisolone', 'Dexamethasone', 'Methylprednisolone',
+    
+    // Antidepressants & Mental Health
+    'Sertraline', 'Fluoxetine', 'Paroxetine', 'Citalopram', 'Escitalopram', 'Venlafaxine',
+    'Duloxetine', 'Bupropion', 'Trazodone', 'Mirtazapine', 'Lorazepam', 'Diazepam',
+    'Alprazolam', 'Clonazepam', 'Quetiapine', 'Risperidone', 'Olanzapine',
+    
+    // Thyroid
+    'Levothyroxine', 'Liothyronine', 'Methimazole', 'Propylthiouracil',
+    
+    // Vitamins & Supplements
+    'Vitamin D', 'Vitamin B12', 'Folic Acid', 'Iron', 'Calcium', 'Magnesium', 'Zinc',
+    'Multivitamin', 'Omega-3', 'Probiotics', 'Coenzyme Q10',
+    
+    // Eye & Ear
+    'Timolol', 'Latanoprost', 'Brimonidine', 'Dorzolamide', 'Artificial Tears',
+    'Neomycin', 'Polymyxin', 'Ciprofloxacin Drops',
+    
+    // Skin
+    'Hydrocortisone', 'Betamethasone', 'Clobetasol', 'Mupirocin', 'Clotrimazole',
+    'Terbinafine', 'Benzoyl Peroxide', 'Salicylic Acid',
+    
+    // Sleep & Anxiety
+    'Melatonin', 'Diphenhydramine', 'Doxylamine', 'Zolpidem', 'Eszopiclone',
+    'Buspirone', 'Hydroxyzine',
+    
+    // Blood Pressure
+    'Hydrochlorothiazide', 'Furosemide', 'Spironolactone', 'Chlorthalidone',
+    'Diltiazem', 'Verapamil', 'Propranolol', 'Atenolol',
+    
+    // Antihistamines
+    'Loratadine', 'Cetirizine', 'Fexofenadine', 'Chlorpheniramine', 'Diphenhydramine',
+    
+    // Muscle Relaxants
+    'Cyclobenzaprine', 'Methocarbamol', 'Carisoprodol', 'Tizanidine',
+    
+    // Migraine
+    'Sumatriptan', 'Rizatriptan', 'Eletriptan', 'Topiramate', 'Propranolol',
+    
+    // Custom option
+    'Custom Medicine'
+  ]
+
+  // Predefined options
+  const dosageOptions = [
+    '5mg', '10mg', '20mg', '25mg', '50mg', '100mg', '200mg', '250mg', '500mg', '1000mg',
+    '0.5ml', '1ml', '2ml', '5ml', '10ml', '15ml', '20ml',
+    '1 tablet', '2 tablets', '3 tablets', '1/2 tablet', '1/4 tablet',
+    '1 capsule', '2 capsules', '3 capsules',
+    '1 drop', '2 drops', '3 drops', '5 drops',
+    '1 spoon', '1/2 spoon', '1 teaspoon', '1 tablespoon',
+    'Custom'
+  ]
+
+  const medicineTypes = [
+    'Tablet', 'Capsule', 'Syrup', 'Injection', 'Drops', 'Cream', 'Ointment', 
+    'Gel', 'Patch', 'Inhaler', 'Powder', 'Liquid', 'Spray', 'Suppository',
+    'Eye Drops', 'Ear Drops', 'Nasal Spray', 'Other'
+  ]
+
+  const frequencyOptions = [
+    'Once daily', 'Twice daily', 'Three times daily', 'Four times daily',
+    'Every 6 hours', 'Every 8 hours', 'Every 12 hours', 'Every 24 hours',
+    'As needed', 'Weekly', 'Monthly'
+  ]
 
   useEffect(() => {
     if (medicine) {
@@ -43,6 +162,7 @@ export default function EditMedicine() {
         const medicineData = JSON.parse(decodeURIComponent(medicine as string))
         setMedicineName(medicineData.medicineName || '')
         setDosage(medicineData.dosage || '')
+        setMedicineType(medicineData.medicineType || '')
         setFrequency(medicineData.frequency || '')
         setDuration(medicineData.duration || '')
         setNotes(medicineData.notes || '')
@@ -58,23 +178,48 @@ export default function EditMedicine() {
           setHasEndDate(true)
         }
         
-        // Set time
+        // Set time - handle both single time and multiple times
         if (medicineData.time) {
-          // Parse time string (e.g., "9:00 PM") to Date object
-          const timeParts = medicineData.time.split(':')
-          const hour = parseInt(timeParts[0])
-          const minuteParts = timeParts[1].split(' ')
-          const minute = parseInt(minuteParts[0])
-          const ampm = minuteParts[1]
-          
-          let hour24 = hour
-          if (ampm === 'PM' && hour !== 12) hour24 += 12
-          if (ampm === 'AM' && hour === 12) hour24 = 0
-          
-          const timeDate = new Date()
-          timeDate.setHours(hour24, minute, 0, 0)
-          setSelectedTime(timeDate)
-          setHasSelectedTime(true)
+          // Check if it's a multiple time string (contains comma)
+          if (medicineData.time.includes(',')) {
+            // Multiple times - parse each time
+            const timeStrings = medicineData.time.split(', ')
+            const times = timeStrings.map((timeStr: string) => {
+              const timeParts = timeStr.split(':')
+              const hour = parseInt(timeParts[0])
+              const minuteParts = timeParts[1].split(' ')
+              const minute = parseInt(minuteParts[0])
+              const ampm = minuteParts[1]
+              
+              let hour24 = hour
+              if (ampm === 'PM' && hour !== 12) hour24 += 12
+              if (ampm === 'AM' && hour === 12) hour24 = 0
+              
+              const timeDate = new Date()
+              timeDate.setHours(hour24, minute, 0, 0)
+              return timeDate
+            })
+            setSelectedTimes(times)
+            setHasSelectedTime(true)
+            setFrequencyCount(times.length)
+          } else {
+            // Single time
+            const timeParts = medicineData.time.split(':')
+            const hour = parseInt(timeParts[0])
+            const minuteParts = timeParts[1].split(' ')
+            const minute = parseInt(minuteParts[0])
+            const ampm = minuteParts[1]
+            
+            let hour24 = hour
+            if (ampm === 'PM' && hour !== 12) hour24 += 12
+            if (ampm === 'AM' && hour === 12) hour24 = 0
+            
+            const timeDate = new Date()
+            timeDate.setHours(hour24, minute, 0, 0)
+            setSelectedTime(timeDate)
+            setHasSelectedTime(true)
+            setFrequencyCount(1)
+          }
         }
       } catch (error) {
         console.log('Error parsing medicine data:', error)
@@ -86,6 +231,215 @@ export default function EditMedicine() {
 
   const formatDate = (date: Date) => {
     return date.toISOString().split('T')[0] // YYYY-MM-DD format
+  }
+
+  const formatTime = (date: Date | undefined) => {
+    if (!date) return ''
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    })
+  }
+
+  // Extract frequency count from frequency string
+  const extractFrequencyCount = (freq: string) => {
+    // Handle numeric patterns like "2 times daily", "3 times daily"
+    const numericMatch = freq.match(/(\d+)\s*times?\s*daily/i)
+    if (numericMatch) {
+      return parseInt(numericMatch[1])
+    }
+    
+    // Handle text patterns
+    const lowerFreq = freq.toLowerCase()
+    if (lowerFreq.includes('once daily') || lowerFreq.includes('once a day')) {
+      return 1
+    } else if (lowerFreq.includes('twice daily') || lowerFreq.includes('two times daily')) {
+      return 2
+    } else if (lowerFreq.includes('three times daily') || lowerFreq.includes('thrice daily')) {
+      return 3
+    } else if (lowerFreq.includes('four times daily')) {
+      return 4
+    } else if (lowerFreq.includes('every 6 hours')) {
+      return 4 // 24/6 = 4 times daily
+    } else if (lowerFreq.includes('every 8 hours')) {
+      return 3 // 24/8 = 3 times daily
+    } else if (lowerFreq.includes('every 12 hours')) {
+      return 2 // 24/12 = 2 times daily
+    } else if (lowerFreq.includes('every 24 hours')) {
+      return 1 // 24/24 = 1 time daily
+    } else if (lowerFreq.includes('as needed') || lowerFreq.includes('weekly') || lowerFreq.includes('monthly')) {
+      return 1
+    }
+    
+    // Default to 1 if no pattern matches
+    return 1
+  }
+
+  // Handle frequency selection
+  const handleFrequencySelect = (selectedFreq: string) => {
+    setFrequency(selectedFreq)
+    setShowFrequencyModal(false)
+    
+    const count = extractFrequencyCount(selectedFreq)
+    setFrequencyCount(count)
+    
+    if (count > 1) {
+      // Show dose selector for multiple doses
+      setSelectedTimes(new Array(count))
+      setHasSelectedTime(false)
+      setCurrentDoseIndex(0)
+      closeAllModals()
+      requestAnimationFrame(() => setShowDoseSelector(true))
+    } else {
+      // Single dose - go directly to time picker
+      setSelectedTime(new Date())
+      setHasSelectedTime(false)
+      closeAllModals()
+      setShowTimePicker(true)
+    }
+  }
+
+  // Handle dose selection
+  const handleDoseSelect = (doseIndex: number) => {
+    console.log('Dose selected:', doseIndex + 1)
+    setCurrentDoseIndex(doseIndex)
+    setShowDoseSelector(false)
+    
+    // Ensure selectedTime is set for the time picker
+    if (!selectedTime) {
+      setSelectedTime(new Date())
+    }
+    
+    // Small delay to ensure modal closes before time picker opens
+    setTimeout(() => {
+      console.log('Opening time picker for dose:', doseIndex + 1)
+      setShowTimePicker(true)
+    }, 100)
+  }
+
+  // Handle time selection for specific dose
+  const handleTimeChange = (event: any, selectedTime?: Date) => {
+    if (selectedTime) {
+      if (frequencyCount > 1) {
+        // Handle multiple time selection for specific dose
+        const newTimes = [...selectedTimes]
+        newTimes[currentDoseIndex] = selectedTime
+        setSelectedTimes(newTimes)
+        
+        // Check if all doses have times set
+        if (newTimes.every(time => time !== undefined)) {
+          setHasSelectedTime(true)
+          setShowTimePicker(false)
+          Alert.alert('Success', `All ${frequencyCount} doses have been scheduled!`)
+        } else {
+          setShowTimePicker(false)
+          // Show dose selector for next dose
+          setTimeout(() => {
+            setShowDoseSelector(true)
+          }, 300)
+        }
+      } else {
+        // Single time selection
+        setSelectedTime(selectedTime)
+        setHasSelectedTime(true)
+        setShowTimePicker(false)
+      }
+    } else {
+      setShowTimePicker(false)
+    }
+  }
+
+  // Get formatted times string
+  const getTimesString = () => {
+    if (frequencyCount > 1 && selectedTimes.filter(time => time !== undefined).length > 0) {
+      return selectedTimes
+        .filter(time => time !== undefined)
+        .map(time => formatTime(time))
+        .join(', ')
+    } else if (hasSelectedTime && selectedTime) {
+      return formatTime(selectedTime)
+    }
+    return ''
+  }
+
+  // Filter medicines based on search text
+  const getFilteredMedicines = () => {
+    if (!medicineSearchText.trim()) {
+      return medicineDictionary
+    }
+    
+    const searchLower = medicineSearchText.toLowerCase().trim()
+    return medicineDictionary.filter(medicine => 
+      medicine.toLowerCase().includes(searchLower)
+    )
+  }
+
+  // Filter medicine types based on search text
+  const getFilteredMedicineTypes = () => {
+    if (!medicineTypeSearchText.trim()) {
+      return medicineTypes
+    }
+    
+    const searchLower = medicineTypeSearchText.toLowerCase().trim()
+    return medicineTypes.filter(type => 
+      type.toLowerCase().includes(searchLower)
+    )
+  }
+
+  // Filter dosage options based on search text
+  const getFilteredDosages = () => {
+    if (!dosageSearchText.trim()) {
+      return dosageOptions
+    }
+    
+    const searchLower = dosageSearchText.toLowerCase().trim()
+    return dosageOptions.filter(dosage => 
+      dosage.toLowerCase().includes(searchLower)
+    )
+  }
+
+  // Handle medicine name selection
+  const handleMedicineNameSelect = (selectedMedicine: string) => {
+    if (selectedMedicine === 'Custom Medicine') {
+      setShowMedicineNameModal(false)
+      Alert.prompt(
+        'Custom Medicine', 
+        'Enter the medicine name:', 
+        (text) => {
+          if (text && text.trim()) {
+            setMedicineName(text.trim())
+          }
+        }
+      )
+    } else {
+      setMedicineName(selectedMedicine)
+      setShowMedicineNameModal(false)
+      setMedicineSearchText('')
+    }
+  }
+
+  // Handle medicine type selection
+  const handleMedicineTypeSelect = (selectedType: string) => {
+    setMedicineType(selectedType)
+    setShowMedicineTypeModal(false)
+    setMedicineTypeSearchText('')
+  }
+
+  // Handle dosage selection
+  const handleDosageSelect = (selectedDosage: string) => {
+    if (selectedDosage === 'Custom') {
+      setShowDosageModal(false)
+      Alert.prompt('Custom Dosage', 'Enter custom dosage:', (text) => {
+        if (text && text.trim()) {
+          setDosage(text.trim())
+        }
+      })
+    } else {
+      setDosage(selectedDosage)
+      setShowDosageModal(false)
+      setDosageSearchText('')
+    }
   }
 
   const handleStartDateChange = (event: any, selectedDate?: Date) => {
@@ -119,11 +473,13 @@ export default function EditMedicine() {
   }
 
   const handleDurationChange = (text: string) => {
-    setDuration(text)
+    // Only allow numbers and common duration units
+    const numericText = text.replace(/[^0-9\s]/g, '')
+    setDuration(numericText)
     
     // Auto-calculate end date if start date is already selected
-    if (hasStartDate && text.trim()) {
-      calculateEndDate(startDate, text.trim())
+    if (hasStartDate && numericText.trim()) {
+      calculateEndDate(startDate, numericText.trim())
     }
   }
 
@@ -135,25 +491,31 @@ export default function EditMedicine() {
     }
   }
 
-  const handleTimeChange = (event: any, selectedTime?: Date) => {
-    setShowTimePicker(false)
-    if (selectedTime) {
-      setSelectedTime(selectedTime)
-      setHasSelectedTime(true)
-    }
-  }
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    })
-  }
 
   const handleUpdateMedicine = async () => {
-    if (!medicineName.trim() || !dosage.trim() || !frequency.trim()) {
-      Alert.alert('Error', 'Please fill in medicine name, dosage, and frequency')
+    // Validate all required fields
+    const missingFields = []
+    
+    if (!medicineName.trim()) missingFields.push('Medicine Name')
+    if (!dosage.trim()) missingFields.push('Dosage')
+    if (!medicineType.trim()) missingFields.push('Medicine Type')
+    if (!frequency.trim()) missingFields.push('Frequency')
+    if (!duration.trim()) missingFields.push('Duration')
+    if (!hasStartDate) missingFields.push('Start Date')
+    if (!hasEndDate) missingFields.push('End Date')
+    if (!hasSelectedTime && frequencyCount === 1) missingFields.push('Reminder Time')
+    
+    if (missingFields.length > 0) {
+      Alert.alert(
+        'Missing Required Fields', 
+        `Please fill in the following fields:\n• ${missingFields.join('\n• ')}`,
+        [{ text: 'OK' }]
+      )
+      return
+    }
+
+    if (frequencyCount > 1 && selectedTimes.filter(time => time !== undefined).length !== frequencyCount) {
+      Alert.alert('Error', `Please select all ${frequencyCount} doses for this frequency`)
       return
     }
 
@@ -164,22 +526,24 @@ export default function EditMedicine() {
     const hasChanges = 
       originalMedicine.medicineName !== medicineName.trim() ||
       originalMedicine.dosage !== dosage.trim() ||
+      originalMedicine.medicineType !== medicineType.trim() ||
       originalMedicine.frequency !== frequency.trim() ||
       originalMedicine.duration !== duration.trim() ||
       originalMedicine.notes !== notes.trim() ||
       (originalMedicine.startDate || '') !== (hasStartDate ? formatDate(startDate) : '') ||
       (originalMedicine.endDate || '') !== (hasEndDate ? formatDate(endDate) : '') ||
-      (originalMedicine.time || '') !== (hasSelectedTime ? formatTime(selectedTime) : '')
+      (originalMedicine.time || '') !== getTimesString()
     
     const updatedMedicine = {
       id: editingMedicineId,
       medicineName: medicineName.trim(),
       dosage: dosage.trim(),
+      medicineType: medicineType.trim(),
       frequency: frequency.trim(),
       duration: duration.trim(),
       startDate: hasStartDate ? formatDate(startDate) : '',
       endDate: hasEndDate ? formatDate(endDate) : '',
-      time: hasSelectedTime ? formatTime(selectedTime) : '',
+      time: getTimesString(),
       notes: notes.trim(),
       ...(hasChanges && {
         lastEditedDate: new Date().toISOString().split('T')[0],
@@ -239,54 +603,76 @@ export default function EditMedicine() {
             
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Medicine Name *</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name={"medkit" as any} size={20} color="#666" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., Paracetamol"
-                  value={medicineName}
-                  onChangeText={setMedicineName}
-                />
-              </View>
+              <TouchableOpacity 
+                style={styles.dropdownButton} 
+                onPress={() => setShowMedicineNameModal(true)}
+              >
+                <Ionicons name={"medkit" as any} size={20} color="#666" />
+                <Text style={[styles.dropdownText, !medicineName && styles.placeholderText]}>
+                  {medicineName || 'Select or search medicine'}
+                </Text>
+                <Ionicons name={"chevron-down" as any} size={20} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Medicine Type *</Text>
+              <TouchableOpacity 
+                style={styles.dropdownButton} 
+                onPress={() => setShowMedicineTypeModal(true)}
+              >
+                <Ionicons name={"medical" as any} size={20} color="#666" />
+                <Text style={[styles.dropdownText, !medicineType && styles.placeholderText]}>
+                  {medicineType || 'Select medicine type'}
+                </Text>
+                <Ionicons name={"chevron-down" as any} size={20} color="#666" />
+              </TouchableOpacity>
             </View>
 
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Dosage *</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name={"fitness" as any} size={20} color="#666" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., 500mg"
-                  value={dosage}
-                  onChangeText={setDosage}
-                />
-              </View>
+              <TouchableOpacity 
+                style={styles.dropdownButton} 
+                onPress={() => setShowDosageModal(true)}
+              >
+                <Ionicons name={"fitness" as any} size={20} color="#666" />
+                <Text style={[styles.dropdownText, !dosage && styles.placeholderText]}>
+                  {dosage || 'Select dosage'}
+                </Text>
+                <Ionicons name={"chevron-down" as any} size={20} color="#666" />
+              </TouchableOpacity>
             </View>
 
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Frequency *</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name={"time" as any} size={20} color="#666" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., 2 times daily"
-                  value={frequency}
-                  onChangeText={setFrequency}
-                />
-              </View>
+              <TouchableOpacity 
+                style={styles.dropdownButton} 
+                onPress={() => setShowFrequencyModal(true)}
+              >
+                <Ionicons name={"time" as any} size={20} color="#666" />
+                <Text style={[styles.dropdownText, !frequency && styles.placeholderText]}>
+                  {frequency || 'Select frequency'}
+                </Text>
+                <Ionicons name={"chevron-down" as any} size={20} color="#666" />
+              </TouchableOpacity>
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Duration</Text>
+              <Text style={styles.label}>Duration *</Text>
               <View style={styles.inputWrapper}>
                 <Ionicons name={"calendar" as any} size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="e.g., 7 days"
+                  placeholder="e.g., 7 (days)"
                   value={duration}
                   onChangeText={handleDurationChange}
+                  keyboardType="numeric"
+                  returnKeyType="done"
                 />
               </View>
+              <Text style={styles.helpText}>
+                💡 Enter number of days (e.g., 7, 14, 30)
+              </Text>
             </View>
           </View>
 
@@ -294,7 +680,7 @@ export default function EditMedicine() {
             <Text style={styles.sectionTitle}>Schedule</Text>
             
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Start Date</Text>
+              <Text style={styles.label}>Start Date *</Text>
               <TouchableOpacity 
                 style={styles.dateButton} 
                 onPress={() => setShowStartDatePicker(true)}
@@ -308,7 +694,7 @@ export default function EditMedicine() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>End Date</Text>
+              <Text style={styles.label}>End Date *</Text>
               <TouchableOpacity 
                 style={styles.dateButton} 
                 onPress={() => setShowEndDatePicker(true)}
@@ -327,20 +713,86 @@ export default function EditMedicine() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Reminder Time</Text>
+              <Text style={styles.label}>
+                Reminder Time *{frequencyCount > 1 ? ` (${selectedTimes.filter(time => time !== undefined).length}/${frequencyCount})` : ''}
+              </Text>
               <TouchableOpacity 
-                style={styles.timeButton} 
-                onPress={() => setShowTimePicker(true)}
+                style={[
+                  styles.timeButton,
+                  frequencyCount > 1 && selectedTimes.length === 0 && styles.timeButtonHighlight
+                ]} 
+                onPress={() => {
+                  if (frequencyCount > 1) {
+                    setShowDoseSelector(true)
+                  } else {
+                    setShowTimePicker(true)
+                  }
+                }}
               >
                 <Ionicons name={"time-outline" as any} size={20} color="#666" />
                 <Text style={[styles.timeText, !hasSelectedTime && styles.placeholderText]}>
-                  {hasSelectedTime ? formatTime(selectedTime) : 'Select reminder time'}
+                  {frequencyCount > 1 
+                    ? selectedTimes.filter(time => time !== undefined).length > 0 
+                      ? `Selected ${selectedTimes.filter(time => time !== undefined).length}/${frequencyCount} doses`
+                      : `Select ${frequencyCount} doses`
+                    : hasSelectedTime 
+                      ? getTimesString() 
+                      : 'Select reminder time'
+                  }
                 </Text>
                 <Ionicons name={"chevron-down" as any} size={20} color="#666" />
               </TouchableOpacity>
+              
+              {frequencyCount > 1 && selectedTimes.filter(time => time !== undefined).length === 0 && (
+                <View style={styles.multiTimeNotification}>
+                  <View style={styles.multiTimeNotificationContent}>
+                    <Ionicons name={"time" as any} size={20} color="#f39c12" />
+                    <View style={styles.multiTimeNotificationText}>
+                      <Text style={styles.multiTimeNotificationTitle}>
+                        Multiple Doses Required
+                      </Text>
+                      <Text style={styles.multiTimeNotificationSubtitle}>
+                        You need to select {frequencyCount} different times for each dose
+                      </Text>
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.setTimesButton}
+                      onPress={() => setShowDoseSelector(true)}
+                    >
+                      <Text style={styles.setTimesButtonText}>Set Doses</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+              
+              {frequencyCount > 1 && selectedTimes.filter(time => time !== undefined).length > 0 && (
+                <View style={styles.multipleTimesContainer}>
+                  {selectedTimes.map((time, index) => {
+                    if (!time) return null
+                    return (
+                      <View key={index} style={styles.timeChip}>
+                        <Text style={styles.timeChipLabel}>
+                          Dose {index + 1}:
+                        </Text>
+                        <Text style={styles.timeChipText}>{formatTime(time)}</Text>
+                      </View>
+                    )
+                  })}
+                </View>
+              )}
+              
+              {frequencyCount > 1 && selectedTimes.filter(time => time !== undefined).length < frequencyCount && (
+                <Text style={styles.progressText}>
+                  📋 Please select {frequencyCount - selectedTimes.filter(time => time !== undefined).length} more dose{frequencyCount - selectedTimes.filter(time => time !== undefined).length > 1 ? 's' : ''}
+                </Text>
+              )}
+              
               {hasSelectedTime && (
                 <Text style={styles.helpText}>
-                  💡 You'll be reminded at this time daily
+                  💡 {frequencyCount > 1 
+                    ? `You'll get ${frequencyCount} separate reminders each day` 
+                    : 'You\'ll be reminded at this time daily'
+                  }
                 </Text>
               )}
             </View>
@@ -400,12 +852,317 @@ export default function EditMedicine() {
 
       {showTimePicker && (
         <DateTimePicker
-          value={selectedTime}
+          value={selectedTime || new Date()}
           mode="time"
           display="default"
           onChange={handleTimeChange}
         />
       )}
+
+      {/* Dose Selector Modal */}
+      <Modal
+        visible={showDoseSelector}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowDoseSelector(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowDoseSelector(false)} />
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Dose to Schedule</Text>
+              <TouchableOpacity onPress={() => setShowDoseSelector(false)}>
+                <Ionicons name={"close" as any} size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.doseSelectorContainer}>
+              <Text style={styles.doseSelectorSubtitle}>
+                Choose which dose you want to schedule:
+              </Text>
+              {Array.from({ length: frequencyCount }, (_, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.doseOption,
+                    selectedTimes[index] !== undefined && styles.doseOptionCompleted
+                  ]}
+                  onPress={() => handleDoseSelect(index)}
+                >
+                  <View style={styles.doseOptionContent}>
+                    <View style={styles.doseOptionLeft}>
+                      <View style={[
+                        styles.doseIcon,
+                        selectedTimes[index] !== undefined && styles.doseIconCompleted
+                      ]}>
+                        <Ionicons 
+                          name={selectedTimes[index] !== undefined ? "checkmark" as any : "time" as any} 
+                          size={20} 
+                          color={selectedTimes[index] !== undefined ? "white" : Colors.PRIMARY} 
+                        />
+                      </View>
+                      <View>
+                        <Text style={styles.doseOptionTitle}>Dose {index + 1}</Text>
+                        {selectedTimes[index] ? (
+                          <Text style={styles.doseOptionTime}>
+                            Scheduled: {formatTime(selectedTimes[index])}
+                          </Text>
+                        ) : (
+                          <Text style={styles.doseOptionSubtitle}>
+                            Tap to set time
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                    {selectedTimes[index] !== undefined ? (
+                      <Ionicons name={"checkmark-circle" as any} size={24} color="#27ae60" />
+                    ) : (
+                      <Ionicons name={"chevron-forward" as any} size={20} color="#bdc3c7" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Medicine Type Modal */}
+      <Modal
+        visible={showMedicineTypeModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowMedicineTypeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Medicine Type</Text>
+              <TouchableOpacity onPress={() => {
+                setShowMedicineTypeModal(false)
+                setMedicineTypeSearchText('')
+              }}>
+                <Ionicons name={"close" as any} size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+              <View style={styles.searchInputWrapper}>
+                <Ionicons name={"search" as any} size={20} color="#666" />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Type to search medicine types..."
+                  value={medicineTypeSearchText}
+                  onChangeText={setMedicineTypeSearchText}
+                  autoFocus={true}
+                />
+                {medicineTypeSearchText.length > 0 && (
+                  <TouchableOpacity onPress={() => setMedicineTypeSearchText('')}>
+                    <Ionicons name={"close-circle" as any} size={20} color="#666" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            <ScrollView style={styles.modalList}>
+              {getFilteredMedicineTypes().length > 0 ? (
+                getFilteredMedicineTypes().map((type, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.modalItem}
+                    onPress={() => handleMedicineTypeSelect(type)}
+                  >
+                    <Text style={styles.modalItemText}>{type}</Text>
+                    {medicineType === type && (
+                      <Ionicons name={"checkmark" as any} size={20} color={Colors.PRIMARY} />
+                    )}
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <View style={styles.noResultsContainer}>
+                  <Ionicons name={"search" as any} size={48} color="#bdc3c7" />
+                  <Text style={styles.noResultsText}>No medicine types found</Text>
+                  <Text style={styles.noResultsSubtext}>
+                    Try typing a few letters of the medicine type
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Dosage Modal */}
+      <Modal
+        visible={showDosageModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowDosageModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Dosage</Text>
+              <TouchableOpacity onPress={() => {
+                setShowDosageModal(false)
+                setDosageSearchText('')
+              }}>
+                <Ionicons name={"close" as any} size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+              <View style={styles.searchInputWrapper}>
+                <Ionicons name={"search" as any} size={20} color="#666" />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Type to search dosages..."
+                  value={dosageSearchText}
+                  onChangeText={setDosageSearchText}
+                  autoFocus={true}
+                />
+                {dosageSearchText.length > 0 && (
+                  <TouchableOpacity onPress={() => setDosageSearchText('')}>
+                    <Ionicons name={"close-circle" as any} size={20} color="#666" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            <ScrollView style={styles.modalList}>
+              {getFilteredDosages().length > 0 ? (
+                getFilteredDosages().map((dosageOption, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.modalItem}
+                    onPress={() => handleDosageSelect(dosageOption)}
+                  >
+                    <Text style={styles.modalItemText}>{dosageOption}</Text>
+                    {dosage === dosageOption && (
+                      <Ionicons name={"checkmark" as any} size={20} color={Colors.PRIMARY} />
+                    )}
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <View style={styles.noResultsContainer}>
+                  <Ionicons name={"search" as any} size={48} color="#bdc3c7" />
+                  <Text style={styles.noResultsText}>No dosages found</Text>
+                  <Text style={styles.noResultsSubtext}>
+                    Try typing a few letters or numbers
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Frequency Modal */}
+      <Modal
+        visible={showFrequencyModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowFrequencyModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Frequency</Text>
+              <TouchableOpacity onPress={() => setShowFrequencyModal(false)}>
+                <Ionicons name={"close" as any} size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalList}>
+              {frequencyOptions.map((freq, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.modalItem}
+                  onPress={() => handleFrequencySelect(freq)}
+                >
+                  <Text style={styles.modalItemText}>{freq}</Text>
+                  {frequency === freq && (
+                    <Ionicons name={"checkmark" as any} size={20} color={Colors.PRIMARY} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Medicine Name Modal with Search */}
+      <Modal
+        visible={showMedicineNameModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowMedicineNameModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Search Medicine</Text>
+              <TouchableOpacity onPress={() => {
+                setShowMedicineNameModal(false)
+                setMedicineSearchText('')
+              }}>
+                <Ionicons name={"close" as any} size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+              <View style={styles.searchInputWrapper}>
+                <Ionicons name={"search" as any} size={20} color="#666" />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Type 2-3 letters to search..."
+                  value={medicineSearchText}
+                  onChangeText={setMedicineSearchText}
+                  autoFocus={true}
+                />
+                {medicineSearchText.length > 0 && (
+                  <TouchableOpacity onPress={() => setMedicineSearchText('')}>
+                    <Ionicons name={"close-circle" as any} size={20} color="#666" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            {/* Medicine List */}
+            <ScrollView style={styles.modalList}>
+              {getFilteredMedicines().length > 0 ? (
+                getFilteredMedicines().map((medicine, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.modalItem}
+                    onPress={() => handleMedicineNameSelect(medicine)}
+                  >
+                    <Text style={styles.modalItemText}>{medicine}</Text>
+                    {medicineName === medicine && (
+                      <Ionicons name={"checkmark" as any} size={20} color={Colors.PRIMARY} />
+                    )}
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <View style={styles.noResultsContainer}>
+                  <Ionicons name={"search" as any} size={48} color="#bdc3c7" />
+                  <Text style={styles.noResultsText}>No medicines found</Text>
+                  <Text style={styles.noResultsSubtext}>
+                    Try typing 2-3 letters of the medicine name
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.customMedicineButton}
+                    onPress={() => handleMedicineNameSelect('Custom Medicine')}
+                  >
+                    <Text style={styles.customMedicineButtonText}>Add Custom Medicine</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   )
 }
@@ -620,5 +1377,268 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  dropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e1e8ed',
+    paddingHorizontal: 15,
+    paddingVertical: 15,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  dropdownText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#2c3e50',
+    marginLeft: 12,
+  },
+  multipleTimesContainer: {
+    marginTop: 10,
+  },
+  timeChip: {
+    backgroundColor: Colors.PRIMARY,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  timeChipLabel: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: '600',
+    marginRight: 6,
+    opacity: 0.9,
+  },
+  timeChipText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  progressText: {
+    fontSize: 12,
+    color: '#f39c12',
+    marginTop: 8,
+    fontWeight: '600',
+  },
+  multiTimeNotification: {
+    marginTop: 15,
+    backgroundColor: '#fff3cd',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ffeaa7',
+    padding: 15,
+  },
+  multiTimeNotificationContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  multiTimeNotificationText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  multiTimeNotificationTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#856404',
+    marginBottom: 2,
+  },
+  multiTimeNotificationSubtitle: {
+    fontSize: 12,
+    color: '#856404',
+  },
+  setTimesButton: {
+    backgroundColor: '#f39c12',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginLeft: 10,
+  },
+  setTimesButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  timeButtonHighlight: {
+    borderColor: Colors.PRIMARY,
+    borderWidth: 2,
+    backgroundColor: '#f8f9ff',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+  },
+  modalList: {
+    maxHeight: 400,
+  },
+  modalItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8f9fa',
+  },
+  modalItemText: {
+    fontSize: 16,
+    color: '#2c3e50',
+  },
+  searchContainer: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#e1e8ed',
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#2c3e50',
+    marginLeft: 10,
+    marginRight: 10,
+  },
+  noResultsContainer: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  noResultsText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#7f8c8d',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  noResultsSubtext: {
+    fontSize: 14,
+    color: '#95a5a6',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  customMedicineButton: {
+    backgroundColor: Colors.PRIMARY,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  customMedicineButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  doseSelectorContainer: {
+    padding: 20,
+  },
+  doseSelectorSubtitle: {
+    fontSize: 16,
+    color: '#7f8c8d',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  doseOption: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e1e8ed',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  doseOptionCompleted: {
+    borderColor: '#27ae60',
+    backgroundColor: '#f8fff8',
+  },
+  doseOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  doseOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  doseIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f8f9fa',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    borderWidth: 2,
+    borderColor: Colors.PRIMARY,
+  },
+  doseIconCompleted: {
+    backgroundColor: '#27ae60',
+    borderColor: '#27ae60',
+  },
+  doseOptionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    marginBottom: 2,
+  },
+  doseOptionSubtitle: {
+    fontSize: 14,
+    color: '#7f8c8d',
+  },
+  doseOptionTime: {
+    fontSize: 14,
+    color: '#27ae60',
+    fontWeight: '600',
   },
 })

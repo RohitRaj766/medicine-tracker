@@ -48,6 +48,8 @@ export default function AddNew() {
   const [selectedTimes, setSelectedTimes] = useState<Date[]>([])
   const [frequencyCount, setFrequencyCount] = useState(1)
   const [medicineSearchText, setMedicineSearchText] = useState('')
+  const [medicineTypeSearchText, setMedicineTypeSearchText] = useState('')
+  const [dosageSearchText, setDosageSearchText] = useState('')
   const [currentDoseIndex, setCurrentDoseIndex] = useState(0)
   const [showDoseSelector, setShowDoseSelector] = useState(false)
 
@@ -302,6 +304,30 @@ export default function AddNew() {
     )
   }
 
+  // Filter medicine types based on search text
+  const getFilteredMedicineTypes = () => {
+    if (!medicineTypeSearchText.trim()) {
+      return medicineTypes
+    }
+    
+    const searchLower = medicineTypeSearchText.toLowerCase().trim()
+    return medicineTypes.filter(type => 
+      type.toLowerCase().includes(searchLower)
+    )
+  }
+
+  // Filter dosage options based on search text
+  const getFilteredDosages = () => {
+    if (!dosageSearchText.trim()) {
+      return dosageOptions
+    }
+    
+    const searchLower = dosageSearchText.toLowerCase().trim()
+    return dosageOptions.filter(dosage => 
+      dosage.toLowerCase().includes(searchLower)
+    )
+  }
+
   // Handle medicine name selection
   const handleMedicineNameSelect = (selectedMedicine: string) => {
     if (selectedMedicine === 'Custom Medicine') {
@@ -319,6 +345,29 @@ export default function AddNew() {
       setMedicineName(selectedMedicine)
       setShowMedicineNameModal(false)
       setMedicineSearchText('')
+    }
+  }
+
+  // Handle medicine type selection
+  const handleMedicineTypeSelect = (selectedType: string) => {
+    setMedicineType(selectedType)
+    setShowMedicineTypeModal(false)
+    setMedicineTypeSearchText('')
+  }
+
+  // Handle dosage selection
+  const handleDosageSelect = (selectedDosage: string) => {
+    if (selectedDosage === 'Custom') {
+      setShowDosageModal(false)
+      Alert.prompt('Custom Dosage', 'Enter custom dosage:', (text) => {
+        if (text && text.trim()) {
+          setDosage(text.trim())
+        }
+      })
+    } else {
+      setDosage(selectedDosage)
+      setShowDosageModal(false)
+      setDosageSearchText('')
     }
   }
 
@@ -353,11 +402,13 @@ export default function AddNew() {
   }
 
   const handleDurationChange = (text: string) => {
-    setDuration(text)
+    // Only allow numbers and common duration units
+    const numericText = text.replace(/[^0-9\s]/g, '')
+    setDuration(numericText)
     
     // Auto-calculate end date if start date is already selected
-    if (hasStartDate && text.trim()) {
-      calculateEndDate(startDate, text.trim())
+    if (hasStartDate && numericText.trim()) {
+      calculateEndDate(startDate, numericText.trim())
     }
   }
 
@@ -371,8 +422,24 @@ export default function AddNew() {
 
 
   const handleSaveMedicine = async () => {
-    if (!medicineName.trim() || !dosage.trim() || !medicineType.trim() || !frequency.trim()) {
-      Alert.alert('Error', 'Please fill in medicine name, medicine type, dosage, and frequency')
+    // Validate all required fields
+    const missingFields = []
+    
+    if (!medicineName.trim()) missingFields.push('Medicine Name')
+    if (!dosage.trim()) missingFields.push('Dosage')
+    if (!medicineType.trim()) missingFields.push('Medicine Type')
+    if (!frequency.trim()) missingFields.push('Frequency')
+    if (!duration.trim()) missingFields.push('Duration')
+    if (!hasStartDate) missingFields.push('Start Date')
+    if (!hasEndDate) missingFields.push('End Date')
+    if (!hasSelectedTime && frequencyCount === 1) missingFields.push('Reminder Time')
+    
+    if (missingFields.length > 0) {
+      Alert.alert(
+        'Missing Required Fields', 
+        `Please fill in the following fields:\n• ${missingFields.join('\n• ')}`,
+        [{ text: 'OK' }]
+      )
       return
     }
 
@@ -563,16 +630,21 @@ export default function AddNew() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Duration</Text>
+              <Text style={styles.label}>Duration *</Text>
               <View style={styles.inputWrapper}>
                 <Ionicons name={"calendar" as any} size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="e.g., 7 days"
+                  placeholder="e.g., 7 (days)"
                   value={duration}
                   onChangeText={handleDurationChange}
+                  keyboardType="numeric"
+                  returnKeyType="done"
                 />
               </View>
+              <Text style={styles.helpText}>
+                💡 Enter number of days (e.g., 7, 14, 30)
+              </Text>
             </View>
           </View>
 
@@ -580,7 +652,7 @@ export default function AddNew() {
             <Text style={styles.sectionTitle}>Schedule</Text>
             
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Start Date</Text>
+              <Text style={styles.label}>Start Date *</Text>
               <TouchableOpacity 
                 style={styles.dateButton} 
                 onPress={() => setShowStartDatePicker(true)}
@@ -594,7 +666,7 @@ export default function AddNew() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>End Date</Text>
+              <Text style={styles.label}>End Date *</Text>
               <TouchableOpacity 
                 style={styles.dateButton} 
                 onPress={() => setShowEndDatePicker(true)}
@@ -614,7 +686,7 @@ export default function AddNew() {
 
             <View style={styles.inputContainer}>
               <Text style={styles.label}>
-                Reminder Time{frequencyCount > 1 ? ` (${selectedTimes.filter(time => time !== undefined).length}/${frequencyCount})` : ''}
+                Reminder Time *{frequencyCount > 1 ? ` (${selectedTimes.filter(time => time !== undefined).length}/${frequencyCount})` : ''}
               </Text>
               <TouchableOpacity 
                 style={[
@@ -729,16 +801,7 @@ export default function AddNew() {
             </Text>
           </TouchableOpacity>
           
-          {/* Temporary Test Button */}
-          <TouchableOpacity 
-            style={[styles.saveButton, { backgroundColor: '#f39c12', marginTop: 10 }]} 
-            onPress={() => {
-              console.log('Test button pressed - opening time picker')
-              setShowTimePicker(true)
-            }}
-          >
-            <Text style={styles.saveButtonText}>Test Time Picker</Text>
-          </TouchableOpacity>
+      
     </View>
       </ScrollView>
 
@@ -849,26 +912,56 @@ export default function AddNew() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Medicine Type</Text>
-              <TouchableOpacity onPress={() => setShowMedicineTypeModal(false)}>
+              <TouchableOpacity onPress={() => {
+                setShowMedicineTypeModal(false)
+                setMedicineTypeSearchText('')
+              }}>
                 <Ionicons name={"close" as any} size={24} color="#666" />
               </TouchableOpacity>
             </View>
+            
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+              <View style={styles.searchInputWrapper}>
+                <Ionicons name={"search" as any} size={20} color="#666" />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Type to search medicine types..."
+                  value={medicineTypeSearchText}
+                  onChangeText={setMedicineTypeSearchText}
+                  autoFocus={true}
+                />
+                {medicineTypeSearchText.length > 0 && (
+                  <TouchableOpacity onPress={() => setMedicineTypeSearchText('')}>
+                    <Ionicons name={"close-circle" as any} size={20} color="#666" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
             <ScrollView style={styles.modalList}>
-              {medicineTypes.map((type, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.modalItem}
-                  onPress={() => {
-                    setMedicineType(type)
-                    setShowMedicineTypeModal(false)
-                  }}
-                >
-                  <Text style={styles.modalItemText}>{type}</Text>
-                  {medicineType === type && (
-                    <Ionicons name={"checkmark" as any} size={20} color={Colors.PRIMARY} />
-                  )}
-                </TouchableOpacity>
-              ))}
+              {getFilteredMedicineTypes().length > 0 ? (
+                getFilteredMedicineTypes().map((type, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.modalItem}
+                    onPress={() => handleMedicineTypeSelect(type)}
+                  >
+                    <Text style={styles.modalItemText}>{type}</Text>
+                    {medicineType === type && (
+                      <Ionicons name={"checkmark" as any} size={20} color={Colors.PRIMARY} />
+                    )}
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <View style={styles.noResultsContainer}>
+                  <Ionicons name={"search" as any} size={48} color="#bdc3c7" />
+                  <Text style={styles.noResultsText}>No medicine types found</Text>
+                  <Text style={styles.noResultsSubtext}>
+                    Try typing a few letters of the medicine type
+                  </Text>
+                </View>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -885,34 +978,56 @@ export default function AddNew() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Dosage</Text>
-              <TouchableOpacity onPress={() => setShowDosageModal(false)}>
+              <TouchableOpacity onPress={() => {
+                setShowDosageModal(false)
+                setDosageSearchText('')
+              }}>
                 <Ionicons name={"close" as any} size={24} color="#666" />
               </TouchableOpacity>
             </View>
+            
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+              <View style={styles.searchInputWrapper}>
+                <Ionicons name={"search" as any} size={20} color="#666" />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Type to search dosages..."
+                  value={dosageSearchText}
+                  onChangeText={setDosageSearchText}
+                  autoFocus={true}
+                />
+                {dosageSearchText.length > 0 && (
+                  <TouchableOpacity onPress={() => setDosageSearchText('')}>
+                    <Ionicons name={"close-circle" as any} size={20} color="#666" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
             <ScrollView style={styles.modalList}>
-              {dosageOptions.map((dosageOption, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.modalItem}
-                  onPress={() => {
-                    if (dosageOption === 'Custom') {
-                      setShowDosageModal(false)
-                      // Could add a custom input modal here
-                      Alert.prompt('Custom Dosage', 'Enter custom dosage:', (text) => {
-                        if (text) setDosage(text)
-                      })
-                    } else {
-                      setDosage(dosageOption)
-                      setShowDosageModal(false)
-                    }
-                  }}
-                >
-                  <Text style={styles.modalItemText}>{dosageOption}</Text>
-                  {dosage === dosageOption && (
-                    <Ionicons name={"checkmark" as any} size={20} color={Colors.PRIMARY} />
-                  )}
-                </TouchableOpacity>
-              ))}
+              {getFilteredDosages().length > 0 ? (
+                getFilteredDosages().map((dosageOption, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.modalItem}
+                    onPress={() => handleDosageSelect(dosageOption)}
+                  >
+                    <Text style={styles.modalItemText}>{dosageOption}</Text>
+                    {dosage === dosageOption && (
+                      <Ionicons name={"checkmark" as any} size={20} color={Colors.PRIMARY} />
+                    )}
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <View style={styles.noResultsContainer}>
+                  <Ionicons name={"search" as any} size={48} color="#bdc3c7" />
+                  <Text style={styles.noResultsText}>No dosages found</Text>
+                  <Text style={styles.noResultsSubtext}>
+                    Try typing a few letters or numbers
+                  </Text>
+                </View>
+              )}
             </ScrollView>
           </View>
         </View>

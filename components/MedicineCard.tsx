@@ -1,25 +1,9 @@
-import Colors from '@/constant/Colors'
-import { updateMedicine } from '@/service/Storage'
 import { Ionicons } from '@expo/vector-icons'
 import React from 'react'
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-
-interface Medicine {
-  id: string
-  medicineName: string
-  dosage: string
-  frequency: string
-  duration?: string
-  startDate?: string
-  endDate?: string
-  time?: string
-  notes?: string
-  createdAt: string
-  consumedDates: string[]
-  missedDates?: string[]
-  lastEditedDate?: string
-  lastEditedChanges?: string[]
-}
+import { Medicine } from '@/types'
+import { updateMedicine } from '@/service/Storage'
+import { colors } from '@/styles/theme'
 
 interface MedicineCardProps {
   medicine: Medicine
@@ -158,7 +142,7 @@ export default function MedicineCard({ medicine, selectedDate, onUpdate }: Medic
       case 'taken': return '#27ae60' // Green
       case 'missed': return '#e74c3c' // Red
       case 'edited': return '#3498db' // Blue
-      default: return '#2c3e50' // Black
+      default: return '#fffdf2' // yellow
     }
   }
 
@@ -167,7 +151,7 @@ export default function MedicineCard({ medicine, selectedDate, onUpdate }: Medic
       case 'taken': return '#f8fff8' // Light green
       case 'missed': return '#fff8f8' // Light red
       case 'edited': return '#f8fbff' // Light blue
-      default: return '#f8f9fa' // Light grey
+      default: return '#fffbdd' // Light yellow
     }
   }
 
@@ -176,7 +160,7 @@ export default function MedicineCard({ medicine, selectedDate, onUpdate }: Medic
       case 'taken': return '#27ae60' // Green
       case 'missed': return '#e74c3c' // Red
       case 'edited': return '#3498db' // Blue
-      default: return '#e9ecef' // Grey
+      default: return '#f39c12' // yellow
     }
   }
 
@@ -185,7 +169,7 @@ export default function MedicineCard({ medicine, selectedDate, onUpdate }: Medic
       case 'taken': return '#27ae60' // Green
       case 'missed': return '#e74c3c' // Red
       case 'edited': return '#3498db' // Blue
-      default: return Colors.PRIMARY // Default primary color
+      default: return "#f39c12" // yellow
     }
   }
 
@@ -311,17 +295,17 @@ const styles = StyleSheet.create({
   medicineName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: colors.text,
     marginBottom: 4,
   },
   medicineTiming: {
     fontSize: 14,
-    color: '#7f8c8d',
+    color: colors.textSecondary,
     marginBottom: 2,
   },
   medicineDosage: {
     fontSize: 12,
-    color: '#95a5a6',
+    color: colors.textSecondary,
   },
   timeContainer: {
     marginLeft: 10,
@@ -357,7 +341,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   takeButton: {
-    backgroundColor: Colors.PRIMARY,
+    backgroundColor: colors.primary,
   },
   missedButton: {
     backgroundColor: '#e74c3c',
