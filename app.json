@@ -19,7 +19,8 @@
         "monochromeImage": "./assets/images/logo.jpg"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.rohitraj2k04.sanjeevaniAI"
     },
     "web": {
       "output": "static",
@@ -43,6 +44,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "aada09fd-5295-4c6e-8c9a-293ce9dae728"
+      }
     }
   }
 }

@@ -1,175 +1,174 @@
-import MedicineCard from '@/components/MedicineCard'
-import Colors from '@/constant/Colors'
-import { getMedicines } from '@/service/Storage'
+import React, { useEffect, useState, useRef } from 'react'
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  RefreshControl,
+  StyleSheet,
+  Dimensions,
+  Animated,
+  Alert
+} from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
-import React, { useEffect, useState } from 'react'
-import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
-interface Medicine {
-  id: string
-  medicineName: string
-  dosage: string
-  frequency: string
-  duration?: string
-  startDate?: string
-  endDate?: string
-  time?: string
-  notes?: string
-  createdAt: string
-  consumedDates: string[]
-  missedDates?: string[]
-  lastEditedDate?: string
-  lastEditedChanges?: string[]
-  parentMedicineId?: string
-  timeSlotIndex?: number
-  medicineType?: string
-}
+// Modular imports
+import { MedicineCard } from '@/components'
+import { useMedicines, useFilteredMedicines, useMedicineStats } from '@/hooks'
+import { theme, colors, spacing, shadows } from '@/styles/theme'
+import { Medicine } from '@/types'
+import { formatDateDisplay, isToday as checkIsToday } from '@/utils/dateUtils'
+import { getMonthDates, hasMedicinesOnDate } from '@/utils/medicineUtils'
+
+const { width: screenWidth } = Dimensions.get('window')
 
 export default function HomeScreen() {
   const router = useRouter()
-  const [medicines, setMedicines] = useState<Medicine[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [selectedDate, setSelectedDate] = useState(new Date())
+  const { medicines, isLoading, loadMedicines, error, addMedicine } = useMedicines()
+  const { filteredMedicines, selectedDate, setDate } = useFilteredMedicines()
+  const stats = useMedicineStats()
+  
+  // Debug logging
+  console.log('HomeScreen - medicines:', medicines.length)
+  console.log('HomeScreen - filteredMedicines:', filteredMedicines.length)
+  console.log('HomeScreen - selectedDate:', selectedDate)
+  console.log('HomeScreen - isLoading:', isLoading)
+  console.log('HomeScreen - error:', error)
+  
+  // Add sample data for testing when no medicines exist
+  useEffect(() => {
+    const addSampleData = async () => {
+      if (medicines.length === 0 && !isLoading && !error) {
+        console.log('No medicines found, adding sample data for testing...')
+        
+        const sampleMedicine = {
+          id: 'sample-1',
+          medicineName: 'Paracetamol',
+          dosage: '500mg',
+          medicineType: 'Pain Relief',
+          frequency: 'Twice daily',
+          duration: '7',
+          startDate: new Date().toISOString().split('T')[0],
+          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          time: '9:00 AM, 9:00 PM',
+          notes: 'Take with food',
+          createdAt: new Date().toISOString(),
+          consumedDates: [],
+          missedDates: []
+        }
+        
+        try {
+          await addMedicine(sampleMedicine)
+          console.log('Sample medicine added successfully')
+        } catch (err) {
+          console.log('Failed to add sample medicine:', err)
+        }
+      }
+    }
+    
+    addSampleData()
+  }, [medicines, isLoading, error, addMedicine])
+  
+  // State management
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth())
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear())
   const [showMonthYearPicker, setShowMonthYearPicker] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [user, setUser] = useState<any>(null)
+  
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current
+  const slideAnim = useRef(new Animated.Value(50)).current
 
+  // Load user data
   useEffect(() => {
-    loadMedicines()
+    const loadUser = async () => {
+      try {
+        const { getLocalStorage } = await import('@/service/Storage')
+        const userData = await getLocalStorage('userDetails')
+        setUser(userData)
+      } catch (error) {
+        console.error('Error loading user:', error)
+      }
+    }
+    loadUser()
   }, [])
 
-  const loadMedicines = async () => {
-    try {
-      const savedMedicines = await getMedicines()
-      console.log('Loaded medicines from storage:', savedMedicines.length)
-      savedMedicines.forEach((med: Medicine, index: number) => {
-        console.log(`Loaded Medicine ${index + 1}:`, {
-          id: med.id,
-          name: med.medicineName,
-          frequency: med.frequency,
-          time: med.time,
-          timeSlotIndex: med.timeSlotIndex,
-          parentMedicineId: med.parentMedicineId
-        })
-      })
-      setMedicines(savedMedicines)
-    } catch (error) {
-      console.log('Error loading medicines:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  // Load medicines on mount
+  useEffect(() => {
+    loadMedicines()
+  }, [loadMedicines])
 
+  // Animate on load
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start()
+  }, [])
+
+  // Refresh handler
   const onRefresh = async () => {
     setRefreshing(true)
     await loadMedicines()
     setRefreshing(false)
   }
 
-  const getDateString = (date: Date) => {
-    return date.toISOString().split('T')[0]
-  }
-
-  const getMedicinesForSelectedDate = () => {
-    const selectedDateString = getDateString(selectedDate)
-    const selectedDateObj = new Date(selectedDate)
-    
-    const filteredMedicines = medicines.filter(medicine => {
-      // Check if medicine has start and end dates
-      if (medicine.startDate && medicine.endDate) {
-        const startDate = new Date(medicine.startDate)
-        const endDate = new Date(medicine.endDate)
-        
-        // Check if selected date is within the medicine's date range
-        return selectedDateObj >= startDate && selectedDateObj <= endDate
-      }
-      
-      // If no date range specified, don't show the medicine
-      return false
-    })
-    
-    // Debug logging
-    console.log('Total medicines:', medicines.length)
-    console.log('Filtered medicines for selected date:', filteredMedicines.length)
-    console.log('Selected date:', selectedDateString)
-    filteredMedicines.forEach((med: Medicine, index: number) => {
-      console.log(`Medicine ${index + 1}:`, {
-        id: med.id,
-        name: med.medicineName,
-        frequency: med.frequency,
-        time: med.time,
-        timeSlotIndex: med.timeSlotIndex
-      })
-    })
-    
-    return filteredMedicines
-  }
-
-  const getMonthDates = () => {
-    const dates = []
-    
-    // Get first day of current month
-    const firstDay = new Date(currentYear, currentMonth, 1)
-    // Get last day of current month
-    const lastDay = new Date(currentYear, currentMonth + 1, 0)
-    
-    // Add dates from first day to last day of month
-    for (let day = 1; day <= lastDay.getDate(); day++) {
-      const date = new Date(currentYear, currentMonth, day)
-      dates.push(date)
-    }
-    
-    return dates
-  }
-
-  const formatDateDisplay = (date: Date) => {
-    const days = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
-    return {
-      day: days[date.getDay()],
-      date: date.getDate().toString()
-    }
-  }
+  // Date utilities
+  const monthDates = getMonthDates(currentYear, currentMonth)
 
   const isSelectedDate = (date: Date) => {
-    return getDateString(date) === getDateString(selectedDate)
+    const date1 = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const date2 = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate())
+    return date1.getTime() === date2.getTime()
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
+  const isToday = (date: Date) => {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const checkDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    return checkDate.getTime() === today.getTime()
   }
 
+
+  const handleDateSelect = (date: Date) => {
+    setDate(date)
+  }
 
   const handleMonthYearChange = (month: number, year: number) => {
     setCurrentMonth(month)
     setCurrentYear(year)
     setShowMonthYearPicker(false)
     
-    // Update selected date to first day of new month if current selection is outside
     const newMonthFirstDay = new Date(year, month, 1)
     if (selectedDate.getMonth() !== month || selectedDate.getFullYear() !== year) {
-      setSelectedDate(newMonthFirstDay)
+      setDate(newMonthFirstDay)
     }
   }
 
   const goToToday = () => {
-    const today = new Date()
+    const now = new Date()
+    // Create a date with only date components (no time)
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     setCurrentMonth(today.getMonth())
     setCurrentYear(today.getFullYear())
-    setSelectedDate(today)
+    setDate(today)
   }
 
-  const isToday = (date: Date) => {
-    const today = new Date()
-    return date.getDate() === today.getDate() &&
-           date.getMonth() === today.getMonth() &&
-           date.getFullYear() === today.getFullYear()
+  const getCurrentMonthYear = () => {
+    return new Date(currentYear, currentMonth).toLocaleDateString('en-US', { 
+      month: 'long', 
+      year: 'numeric' 
+    })
   }
 
   const getMonthYearOptions = () => {
@@ -187,21 +186,56 @@ export default function HomeScreen() {
     return { months, years }
   }
 
-  const selectedDateMedicines = getMedicinesForSelectedDate()
-  const monthDates = getMonthDates()
-  
-  const getCurrentMonthYear = () => {
-    return new Date(currentYear, currentMonth).toLocaleDateString('en-US', { 
-      month: 'long', 
-      year: 'numeric' 
-    })
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Good Morning'
+    if (hour < 17) return 'Good Afternoon'
+    return 'Good Evening'
   }
+
+  // Get today's specific stats
+  const getTodaysStats = () => {
+    const today = new Date()
+    const todayString = today.toISOString().split('T')[0]
+    
+    const takenToday = medicines.filter(med => 
+      med.consumedDates?.includes(todayString)
+    ).length
+    
+    const missedToday = medicines.filter(med => 
+      med.missedDates?.includes(todayString)
+    ).length
+    
+    const pendingToday = filteredMedicines.length - takenToday - missedToday
+    
+    return { takenToday, missedToday, pendingToday }
+  }
+
+  const todaysStats = getTodaysStats()
+  const monthYearOptions = getMonthYearOptions()
 
   if (isLoading) {
     return (
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading medicines...</Text>
+          <Ionicons name={"medical" as any} size={48} color={colors.primary} />
+          <Text style={styles.loadingText}>Loading your medicines...</Text>
+          <Text style={styles.loadingSubtext}>Please wait while we fetch your data</Text>
+        </View>
+      </View>
+    )
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Ionicons name={"warning" as any} size={48} color={colors.error} />
+          <Text style={styles.loadingText}>Error Loading Medicines</Text>
+          <Text style={styles.loadingSubtext}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadMedicines}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       </View>
     )
@@ -209,162 +243,231 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Calendar Header */}
-      <View style={styles.calendarHeader}>
-        <View style={styles.calendarTitleContainer}>
-          <Text style={styles.calendarTitle}>{getCurrentMonthYear()}</Text>
-          <View style={styles.headerButtons}>
-            <TouchableOpacity 
-              style={styles.todayButton}
-              onPress={goToToday}
-            >
-              <Ionicons name={"today" as any} size={16} color="white" />
-              <Text style={styles.todayButtonText}>Today</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.monthYearButton}
-              onPress={() => setShowMonthYearPicker(true)}
-            >
-              <Ionicons name={"chevron-down" as any} size={20} color="#666" />
-            </TouchableOpacity>
-          </View>
-        </View>
-        
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.datePickerContainer}
-        >
-          {monthDates.map((date, index) => {
-            const dateDisplay = formatDateDisplay(date)
-            const selected = isSelectedDate(date)
-            const isTodayDate = isToday(date)
-            const hasMedicines = medicines.some(med => {
-              if (med.startDate && med.endDate) {
-                const startDate = new Date(med.startDate)
-                const endDate = new Date(med.endDate)
-                return date >= startDate && date <= endDate
-              }
-              return false
-            })
-            
-            return (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.dateCard, 
-                  selected && styles.selectedDateCard,
-                  hasMedicines && !selected && styles.hasMedicinesCard,
-                  isTodayDate && !selected && styles.todayCard
-                ]}
-                onPress={() => setSelectedDate(date)}
-              >
-                <Text style={[
-                  styles.dateDay, 
-                  selected && styles.selectedDateText,
-                  hasMedicines && !selected && styles.hasMedicinesText,
-                  isTodayDate && !selected && styles.todayText
-                ]}>
-                  {dateDisplay.day}
-                </Text>
-                <Text style={[
-                  styles.dateNumber, 
-                  selected && styles.selectedDateText,
-                  hasMedicines && !selected && styles.hasMedicinesText,
-                  isTodayDate && !selected && styles.todayText
-                ]}>
-                  {dateDisplay.date}
-                </Text>
-                {isTodayDate && !selected && (
-                  <View style={styles.todayIndicator} />
-                )}
-                {hasMedicines && (
-                  <View style={[styles.medicineIndicator, selected && styles.selectedIndicator]} />
-                )}
-              </TouchableOpacity>
-            )
-          })}
-        </ScrollView>
-      </View>
-      
       <ScrollView 
-        style={styles.scrollView}
+        style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
         }
         showsVerticalScrollIndicator={false}
       >
-        {medicines.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconContainer}>
-              <Ionicons name={"medical-outline" as any} size={80} color="#bdc3c7" />
+        <Animated.View 
+          style={[
+            styles.content,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }
+          ]}
+        >
+          {/* Header Section */}
+          <View style={styles.headerSection}>
+            <Text style={styles.greeting}>{getGreeting()}</Text>
+            <Text style={styles.userName}>{user?.displayName || 'User'}</Text>
+            <Text style={styles.dateDisplay}>
+              {selectedDate.toLocaleDateString('en-US', { 
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric'
+              })}
+            </Text>
+          </View>
+
+          {/* Today's Stats */}
+        <View style={styles.statsContainer}>
+          <Text style={styles.statsTitle}>Today's Overview</Text>
+          <View style={styles.statsGrid}>
+            <View style={[styles.statCard, styles.takenCard]}>
+              <Ionicons name={"checkmark-circle" as any} size={24} color={colors.success} />
+              <Text style={styles.statNumber}>{todaysStats.takenToday}</Text>
+              <Text style={styles.statLabel}>Taken</Text>
             </View>
-            <Text style={styles.emptyTitle}>No Medicines Added</Text>
-            <Text style={styles.emptySubtitle}>
-              Start tracking your medications by adding your first medicine
+            <View style={[styles.statCard, styles.missedCard]}>
+              <Ionicons name={"close-circle" as any} size={24} color={colors.error} />
+              <Text style={styles.statNumber}>{todaysStats.missedToday}</Text>
+              <Text style={styles.statLabel}>Missed</Text>
+            </View>
+            <View style={[styles.statCard, styles.pendingCard]}>
+              <Ionicons name={"time" as any} size={24} color={colors.warning} />
+              <Text style={styles.statNumber}>{todaysStats.pendingToday}</Text>
+              <Text style={styles.statLabel}>Pending</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Calendar Section */}
+        <View style={styles.calendarSection}>
+          <View style={styles.calendarHeader}>
+            <Text style={styles.calendarTitle}>Calendar</Text>
+            <View style={styles.headerActions}>
+              <TouchableOpacity style={styles.todayButton} onPress={goToToday}>
+                <Ionicons name={"today" as any} size={16} color={colors.textInverse} />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.monthYearButton}
+                onPress={() => setShowMonthYearPicker(true)}
+              >
+                <Text style={styles.monthYearText}>{getCurrentMonthYear()}</Text>
+                <Ionicons name={"chevron-down" as any} size={16} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Date Picker */}
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.datePickerContainer}
+          >
+            {monthDates.map((date, index) => {
+              const days = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+              const dateDisplay = {
+                day: days[date.getDay()],
+                date: date.getDate().toString()
+              }
+              const selected = isSelectedDate(date)
+              const isTodayDate = isToday(date)
+              const hasMedicines = hasMedicinesOnDate(medicines, date)
+              
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.dateCard,
+                    selected && styles.selectedDateCard,
+                    hasMedicines && !selected && styles.hasMedicinesCard,
+                    isTodayDate && !selected && styles.todayCard
+                  ]}
+                  onPress={() => handleDateSelect(date)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[
+                    styles.dateDay,
+                    selected && styles.selectedDateText,
+                    hasMedicines && !selected && styles.hasMedicinesText,
+                    isTodayDate && !selected && styles.todayText
+                  ]}>
+                    {dateDisplay.day}
+                  </Text>
+                  <Text style={[
+                    styles.dateNumber,
+                    selected && styles.selectedDateText,
+                    hasMedicines && !selected && styles.hasMedicinesText,
+                    isTodayDate && !selected && styles.todayText
+                  ]}>
+                    {dateDisplay.date}
+                  </Text>
+                  
+                  {isTodayDate && !selected && (
+                    <View style={styles.todayIndicator} />
+                  )}
+                  
+                  {hasMedicines && (
+                    <View style={[
+                      styles.medicineIndicator,
+                      selected && styles.selectedIndicator
+                    ]} />
+                  )}
+                </TouchableOpacity>
+              )
+            })}
+          </ScrollView>
+        </View>
+
+        {/* Medicines List */}
+        <View style={styles.medicinesSection}>
+          <View style={styles.medicinesHeader}>
+            <Text style={styles.medicinesTitle}>
+               {selectedDate.toLocaleDateString('en-US', { 
+                weekday: 'long',
+                month: 'short',
+                day: 'numeric'
+              })}
             </Text>
             <TouchableOpacity 
-              style={styles.emptyAddButton}
+              style={styles.addButton}
               onPress={() => router.push('/(tabs)/AddNew')}
             >
-              <Ionicons name={"add" as any} size={20} color="white" />
-              <Text style={styles.emptyAddButtonText}>Add Your First Medicine</Text>
+              <Ionicons name={"add" as any} size={20} color={colors.textInverse} />
             </TouchableOpacity>
           </View>
-        ) : (
-          <>
-            {selectedDateMedicines.length > 0 ? (
-              <View style={styles.medicinesContainer}>
-                {selectedDateMedicines.map(medicine => (
-                  <MedicineCard 
-                    key={medicine.id} 
-                    medicine={medicine} 
+
+          {filteredMedicines.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name={"medical-outline" as any} size={64} color={colors.textTertiary} />
+              <Text style={styles.emptyTitle}>No medicines scheduled</Text>
+              <Text style={styles.emptySubtitle}>
+                {isToday(selectedDate) 
+                  ? "You're all caught up for today!"
+                  : "No medicines scheduled for this date"
+                }
+              </Text>
+              <TouchableOpacity 
+                style={styles.emptyActionButton}
+                onPress={() => router.push('/(tabs)/AddNew')}
+              >
+                <Ionicons name={"add-circle" as any} size={20} color={colors.textInverse} />
+                <Text style={styles.emptyActionText}>Add Medicine</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.medicinesList}>
+              {filteredMedicines.map((medicine, index) => (
+                <Animated.View
+                  key={medicine.id}
+                  style={[
+                    styles.medicineCardContainer,
+                    {
+                      opacity: fadeAnim,
+                      transform: [
+                        {
+                          translateY: slideAnim.interpolate({
+                            inputRange: [0, 50],
+                            outputRange: [0, 50 + (index * 10)],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <MedicineCard
+                    medicine={medicine}
                     selectedDate={selectedDate}
                     onUpdate={loadMedicines}
                   />
-                ))}
-              </View>
-            ) : (
-              <View style={styles.noMedicinesContainer}>
-                <Ionicons name={"calendar-outline" as any} size={60} color="#bdc3c7" />
-                <Text style={styles.noMedicinesTitle}>No Medicines for This Date</Text>
-                <Text style={styles.noMedicinesSubtitle}>
-                  No medicines were taken on {selectedDate.toLocaleDateString()}
-                </Text>
-              </View>
-            )}
-          </>
-        )}
+                </Animated.View>
+              ))}
+            </View>
+          )}
+        </View>
+        </Animated.View>
       </ScrollView>
-
-      {/* Floating Action Button */}
-      {medicines.length > 0 && (
-        <TouchableOpacity 
-          style={styles.fab}
-          onPress={() => router.push('/(tabs)/AddNew')}
-        >
-          <Ionicons name={"add" as any} size={28} color="white" />
-        </TouchableOpacity>
-      )}
 
       {/* Month/Year Picker Modal */}
       {showMonthYearPicker && (
         <View style={styles.modalOverlay}>
-          <View style={styles.pickerModal}>
-            <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>Select Month & Year</Text>
-              <TouchableOpacity 
-                style={styles.closeButton}
-                onPress={() => setShowMonthYearPicker(false)}
-              >
-                <Ionicons name={"close" as any} size={24} color="#666" />
+          <TouchableOpacity 
+            style={styles.modalBackdrop}
+            onPress={() => setShowMonthYearPicker(false)}
+            activeOpacity={1}
+          />
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Month & Year</Text>
+              <TouchableOpacity onPress={() => setShowMonthYearPicker(false)}>
+                <Ionicons name={"close" as any} size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
             
-            <View style={styles.pickerContent}>
-              <ScrollView style={styles.monthsScrollView}>
-                {getMonthYearOptions().months.map((month, index) => (
+            <View style={styles.pickerContainer}>
+              <ScrollView style={styles.monthsList}>
+                {monthYearOptions.months.map((month, index) => (
                   <TouchableOpacity
                     key={index}
                     style={[
@@ -383,8 +486,8 @@ export default function HomeScreen() {
                 ))}
               </ScrollView>
               
-              <ScrollView style={styles.yearsScrollView}>
-                {getMonthYearOptions().years.map((year) => (
+              <ScrollView style={styles.yearsList}>
+                {monthYearOptions.years.map((year) => (
                   <TouchableOpacity
                     key={year}
                     style={[
@@ -413,238 +516,309 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: colors.background,
+    paddingTop: 15, // Safe area for status bar
   },
-  calendarHeader: {
-    backgroundColor: 'white',
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 25,
-    borderBottomRightRadius: 25,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  calendarTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  calendarTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    flex: 1,
-    textAlign: 'center',
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  todayButton: {
-    backgroundColor: Colors.PRIMARY,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-    shadowColor: Colors.PRIMARY,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  todayButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  monthYearButton: {
-    padding: 4,
-  },
-  datePickerContainer: {
-    paddingHorizontal: 10,
-  },
-  dateCard: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 15,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginHorizontal: 6,
-    alignItems: 'center',
-    minWidth: 60,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-  },
-  selectedDateCard: {
-    backgroundColor: Colors.PRIMARY,
-    borderColor: Colors.PRIMARY,
-  },
-  dateDay: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6c757d',
-    marginBottom: 4,
-  },
-  dateNumber: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-  },
-  selectedDateText: {
-    color: 'white',
-  },
-  hasMedicinesCard: {
-    backgroundColor: '#e8f5e8',
-    borderColor: '#27ae60',
-  },
-  hasMedicinesText: {
-    color: '#27ae60',
-    fontWeight: '600',
-  },
-  medicineIndicator: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#27ae60',
-    marginTop: 2,
-  },
-  selectedIndicator: {
-    backgroundColor: 'white',
-  },
-  todayCard: {
-    backgroundColor: '#fff3cd',
-    borderColor: '#ffc107',
-    borderWidth: 2,
-  },
-  todayText: {
-    color: '#856404',
-    fontWeight: 'bold',
-  },
-  todayIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ffc107',
-    marginTop: 2,
-  },
-  scrollView: {
+  scrollContainer: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 100,
+    flexGrow: 1,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    padding: spacing.xl,
   },
   loadingText: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: theme.typography.fontSize.lg,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: colors.text,
+    marginTop: spacing.md,
+    textAlign: 'center',
   },
-  emptyContainer: {
+  loadingSubtext: {
+    fontSize: theme.typography.fontSize.sm,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: theme.borderRadius.md,
+    marginTop: spacing.md,
+  },
+  retryButtonText: {
+    color: colors.textInverse,
+    fontSize: theme.typography.fontSize.md,
+    fontWeight: theme.typography.fontWeight.semibold,
+    textAlign: 'center',
+  },
+  content: {
     flex: 1,
-    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+  },
+  headerSection: {
+    marginBottom: spacing.xl,
+    paddingVertical: spacing.lg,
+  },
+  greeting: {
+    fontSize: theme.typography.fontSize.xl,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  userName: {
+    fontSize: theme.typography.fontSize.xxl,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: colors.primary,
+    marginBottom: spacing.sm,
+  },
+  dateDisplay: {
+    fontSize: theme.typography.fontSize.md,
+    color: colors.textSecondary,
+    fontWeight: theme.typography.fontWeight.medium,
+  },
+
+  statsContainer: {
+    marginBottom: spacing.lg,
+  },
+  statsTitle: {
+    fontSize: theme.typography.fontSize.lg,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    padding: spacing.md,
     alignItems: 'center',
-    padding: 40,
-    marginTop: 50,
+    marginHorizontal: spacing.xs,
+    ...shadows.sm,
   },
-  emptyIconContainer: {
-    marginBottom: 20,
+  takenCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.success,
   },
-  emptyTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 15,
-    textAlign: 'center',
+  missedCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.error,
   },
-  emptySubtitle: {
-    fontSize: 16,
-    color: '#7f8c8d',
-    textAlign: 'center',
-    marginBottom: 40,
-    lineHeight: 24,
-    paddingHorizontal: 20,
+  pendingCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.warning,
   },
-  emptyAddButton: {
-    backgroundColor: Colors.PRIMARY,
+  statNumber: {
+    fontSize: theme.typography.fontSize.xxl,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: colors.text,
+    marginTop: spacing.sm,
+  },
+  statLabel: {
+    fontSize: theme.typography.fontSize.sm,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  calendarSection: {
+    marginBottom: spacing.lg,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  calendarTitle: {
+    fontSize: theme.typography.fontSize.lg,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: colors.text,
+  },
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    borderRadius: 25,
-    shadowColor: Colors.PRIMARY,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
   },
-  emptyAddButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  medicinesContainer: {
-    padding: 20,
-  },
-  noMedicinesContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  todayButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    padding: 40,
-    marginTop: 100,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: theme.borderRadius.lg,
+    marginRight: spacing.md,
+    ...shadows.sm,
   },
-  noMedicinesTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginTop: 20,
-    marginBottom: 10,
-    textAlign: 'center',
+  todayButtonText: {
+    color: colors.textInverse,
+    fontSize: theme.typography.fontSize.sm,
+    fontWeight: theme.typography.fontWeight.semibold,
+    marginLeft: spacing.xs,
   },
-  noMedicinesSubtitle: {
-    fontSize: 16,
-    color: '#7f8c8d',
-    textAlign: 'center',
-    lineHeight: 24,
+  monthYearButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  fab: {
-    position: 'absolute',
-    bottom: 30,
-    right: 30,
-    backgroundColor: Colors.PRIMARY,
+  monthYearText: {
+    fontSize: theme.typography.fontSize.md,
+    fontWeight: theme.typography.fontWeight.medium,
+    color: colors.text,
+    marginRight: spacing.xs,
+  },
+  datePickerContainer: {
+    paddingHorizontal: spacing.sm,
+  },
+  dateCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
     width: 60,
-    height: 60,
-    borderRadius: 30,
+    height: 70,
+    backgroundColor: colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    marginHorizontal: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.sm,
+  },
+  selectedDateCard: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+    ...shadows.md,
+  },
+  hasMedicinesCard: {
+    borderColor: colors.success,
+    borderWidth: 2,
+  },
+  todayCard: {
+    borderColor: colors.border,
+    borderWidth: 1,
+  },
+  dateDay: {
+    fontSize: theme.typography.fontSize.xs,
+    fontWeight: theme.typography.fontWeight.medium,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  dateNumber: {
+    fontSize: theme.typography.fontSize.lg,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: colors.text,
+  },
+  selectedDateText: {
+    color: colors.textInverse,
+  },
+  hasMedicinesText: {
+    color: colors.success,
+  },
+  todayText: {
+    color: colors.text,
+  },
+  todayIndicator: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+  },
+  medicineIndicator: {
+    position: 'absolute',
+    bottom: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.success,
+  },
+  selectedIndicator: {
+    backgroundColor: colors.textInverse,
+  },
+  medicinesSection: {
+    flex: 1,
+  },
+  medicinesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  medicinesTitle: {
+    fontSize: theme.typography.fontSize.lg,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: colors.text,
+    flex: 1,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: theme.borderRadius.lg,
+    ...shadows.sm,
+  },
+  addButtonText: {
+    color: colors.textInverse,
+    fontSize: theme.typography.fontSize.sm,
+    fontWeight: theme.typography.fontWeight.semibold,
+    marginLeft: spacing.xs,
+  },
+  medicinesList: {
+    paddingBottom: spacing.xl,
+  },
+  medicineCardContainer: {
+    marginBottom: spacing.md,
+  },
+  emptyState: {
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: Colors.PRIMARY,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    paddingVertical: spacing.xxxl,
+    paddingHorizontal: spacing.lg,
+    minHeight: 300,
+  },
+  emptyTitle: {
+    fontSize: theme.typography.fontSize.lg,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  emptySubtitle: {
+    fontSize: theme.typography.fontSize.md,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+    paddingHorizontal: spacing.lg,
+  },
+  emptyActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: theme.borderRadius.lg,
+    marginTop: spacing.lg,
+    ...shadows.md,
+  },
+  emptyActionText: {
+    color: colors.textInverse,
+    fontSize: theme.typography.fontSize.md,
+    fontWeight: theme.typography.fontWeight.semibold,
+    marginLeft: spacing.sm,
   },
   modalOverlay: {
     position: 'absolute',
@@ -652,73 +826,63 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
+    backgroundColor: colors.overlay,
+    justifyContent: 'flex-end',
   },
-  pickerModal: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 20,
-    margin: 20,
-    maxHeight: '70%',
-    minWidth: '80%',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 10,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
-  pickerHeader: {
+  modalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: theme.borderRadius.xl,
+    borderTopRightRadius: theme.borderRadius.xl,
+    maxHeight: '60%',
+    ...shadows.xl,
+  },
+  modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 15,
+    padding: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#e1e8ed',
+    borderBottomColor: colors.borderLight,
   },
-  pickerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2c3e50',
+  modalTitle: {
+    fontSize: theme.typography.fontSize.xl,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: colors.text,
   },
-  closeButton: {
-    padding: 5,
-  },
-  pickerContent: {
+  pickerContainer: {
     flexDirection: 'row',
-    gap: 20,
+    padding: spacing.lg,
   },
-  monthsScrollView: {
+  monthsList: {
     flex: 1,
-    maxHeight: 300,
+    marginRight: spacing.md,
   },
-  yearsScrollView: {
+  yearsList: {
     flex: 1,
-    maxHeight: 300,
+    marginLeft: spacing.md,
   },
   pickerItem: {
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    marginVertical: 2,
-    backgroundColor: '#f8f9fa',
+    padding: spacing.md,
+    borderRadius: theme.borderRadius.md,
+    marginBottom: spacing.sm,
   },
   selectedPickerItem: {
-    backgroundColor: Colors.PRIMARY,
+    backgroundColor: colors.primaryLight,
   },
   pickerItemText: {
-    fontSize: 16,
-    color: '#2c3e50',
+    fontSize: theme.typography.fontSize.md,
+    color: colors.text,
     textAlign: 'center',
   },
   selectedPickerItemText: {
-    color: 'white',
-    fontWeight: '600',
+    color: colors.primary,
+    fontWeight: theme.typography.fontWeight.semibold,
   },
 })
