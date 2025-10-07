@@ -1,33 +1,25 @@
-import { Auth } from '@/config/FirebaseConfig'
-import Colors from '@/constant/Colors'
-import { clearLocalStorage, getLocalStorage, getMedicines } from '@/service/Storage'
+// External libraries
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { signOut } from 'firebase/auth'
 import React, { useEffect, useState } from 'react'
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
+// Internal modules
+import { Auth } from '@/config/FirebaseConfig'
+import { useMedicines, useMedicineStats } from '@/hooks'
+import { clearLocalStorage, getLocalStorage } from '@/service/Storage'
+import { theme, colors, spacing, shadows } from '@/styles/theme'
+import { User } from '@/types'
+
 export default function Profile() {
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
-  const [medicines, setMedicines] = useState<any[]>([])
-  const [stats, setStats] = useState({
-    totalMedicines: 0,
-    activeMedicines: 0,
-    takenToday: 0,
-    missedToday: 0,
-    // Lifetime metrics
-    totalTakenCount: 0,
-    totalMissedCount: 0,
-    totalDaysTracked: 0,
-    complianceRate: 0,
-    longestStreak: 0,
-    currentStreak: 0
-  })
+  const [user, setUser] = useState<User | null>(null)
+  const { medicines, isLoading } = useMedicines()
+  const stats = useMedicineStats()
 
   useEffect(() => {
     getUserDetails()
-    loadMedicines()
   }, [])
 
   const getUserDetails = async () => {
@@ -39,125 +31,29 @@ export default function Profile() {
     }
   }
 
-  const loadMedicines = async () => {
-    try {
-      const savedMedicines = await getMedicines()
-      setMedicines(savedMedicines)
-      calculateStats(savedMedicines)
-    } catch (error) {
-      console.log('Error loading medicines:', error)
-    }
-  }
-
-  const calculateStats = (medicines: any[]) => {
+  // Calculate today's specific stats
+  const getTodaysStats = () => {
     const today = new Date().toISOString().split('T')[0]
-    const total = medicines.length
-    const active = medicines.filter(med => 
+    const takenToday = medicines.filter(med => 
+      med.consumedDates?.includes(today)
+    ).length
+    const missedToday = medicines.filter(med => 
+      med.missedDates?.includes(today)
+    ).length
+    const activeMedicines = medicines.filter(med => 
       (!med.endDate || new Date(med.endDate) >= new Date()) &&
       (!med.startDate || new Date(med.startDate) <= new Date())
     ).length
-    const taken = medicines.filter(med => 
-      med.consumedDates && med.consumedDates.includes(today)
-    ).length
-    const missed = medicines.filter(med => 
-      med.missedDates && med.missedDates.includes(today)
-    ).length
 
-    // Calculate lifetime metrics
-    const totalTakenCount = medicines.reduce((sum, med) => 
-      sum + (med.consumedDates ? med.consumedDates.length : 0), 0
-    )
-    const totalMissedCount = medicines.reduce((sum, med) => 
-      sum + (med.missedDates ? med.missedDates.length : 0), 0
-    )
-
-    // Calculate total days tracked
-    const allDates = new Set<string>()
-    medicines.forEach(med => {
-      if (med.consumedDates) med.consumedDates.forEach((date: string) => allDates.add(date))
-      if (med.missedDates) med.missedDates.forEach((date: string) => allDates.add(date))
-    })
-    const totalDaysTracked = allDates.size
-
-    // Calculate compliance rate
-    const totalActions = totalTakenCount + totalMissedCount
-    const complianceRate = totalActions > 0 ? Math.round((totalTakenCount / totalActions) * 100) : 0
-
-    // Calculate streaks (simplified - based on consecutive days with any medicine taken)
-    const { longestStreak, currentStreak } = calculateStreaks(medicines)
-
-    setStats({ 
-      totalMedicines: total, 
-      activeMedicines: active, 
-      takenToday: taken, 
-      missedToday: missed,
-      totalTakenCount,
-      totalMissedCount,
-      totalDaysTracked,
-      complianceRate,
-      longestStreak,
-      currentStreak
-    })
+    return {
+      takenToday,
+      missedToday,
+      activeMedicines,
+      totalMedicines: medicines.length
+    }
   }
 
-  const calculateStreaks = (medicines: any[]) => {
-    // Get all unique dates when any medicine was taken
-    const allTakenDates = new Set<string>()
-    medicines.forEach(med => {
-      if (med.consumedDates) {
-        med.consumedDates.forEach((date: string) => allTakenDates.add(date))
-      }
-    })
-
-    // Sort dates
-    const sortedDates = Array.from(allTakenDates).sort()
-    
-    if (sortedDates.length === 0) return { longestStreak: 0, currentStreak: 0 }
-
-    let longestStreak = 1
-    let currentStreak = 1
-    let tempStreak = 1
-
-    for (let i = 1; i < sortedDates.length; i++) {
-      const prevDate = new Date(sortedDates[i - 1])
-      const currDate = new Date(sortedDates[i])
-      const diffTime = currDate.getTime() - prevDate.getTime()
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-
-      if (diffDays === 1) {
-        tempStreak++
-        longestStreak = Math.max(longestStreak, tempStreak)
-      } else {
-        tempStreak = 1
-      }
-    }
-
-    // Calculate current streak (from most recent date)
-    const today = new Date()
-    const mostRecentDate = new Date(sortedDates[sortedDates.length - 1])
-    const daysSinceLastTaken = Math.ceil((today.getTime() - mostRecentDate.getTime()) / (1000 * 60 * 60 * 24))
-
-    if (daysSinceLastTaken <= 1) {
-      // Calculate current streak backwards from most recent date
-      currentStreak = 1
-      for (let i = sortedDates.length - 2; i >= 0; i--) {
-        const prevDate = new Date(sortedDates[i])
-        const currDate = new Date(sortedDates[i + 1])
-        const diffTime = currDate.getTime() - prevDate.getTime()
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-        
-        if (diffDays === 1) {
-          currentStreak++
-        } else {
-          break
-        }
-      }
-    } else {
-      currentStreak = 0
-    }
-
-    return { longestStreak, currentStreak }
-  }
+  const todaysStats = getTodaysStats()
 
   const handleLogout = () => {
     Alert.alert(
@@ -201,7 +97,7 @@ export default function Profile() {
           <View style={styles.profileSection}>
             <View style={styles.avatarContainer}>
               <View style={styles.avatar}>
-                <Ionicons name={"person" as any} size={40} color={Colors.PRIMARY} />
+                <Ionicons name={"person" as any} size={40} color={colors.primary} />
               </View>
               <View style={styles.statusIndicator} />
             </View>
@@ -223,35 +119,35 @@ export default function Profile() {
       <View style={styles.statsContainer}>
         <Text style={styles.sectionTitle}>Today's Overview</Text>
         <View style={styles.statsGrid}>
-          <View style={[styles.statCard, { backgroundColor: '#e8f5e8' }]}>
+          <View style={[styles.statCard, { backgroundColor: colors.successLight }]}>
             <View style={styles.statIconContainer}>
-              <Ionicons name={"checkmark-circle" as any} size={24} color="#27ae60" />
+              <Ionicons name={"checkmark-circle" as any} size={24} color={colors.success} />
             </View>
-            <Text style={styles.statNumber}>{stats.takenToday}</Text>
+            <Text style={styles.statNumber}>{todaysStats.takenToday}</Text>
             <Text style={styles.statLabel}>Taken Today</Text>
           </View>
           
-          <View style={[styles.statCard, { backgroundColor: '#ffeaea' }]}>
+          <View style={[styles.statCard, { backgroundColor: colors.errorLight }]}>
             <View style={styles.statIconContainer}>
-              <Ionicons name={"close-circle" as any} size={24} color="#e74c3c" />
+              <Ionicons name={"close-circle" as any} size={24} color={colors.error} />
             </View>
-            <Text style={styles.statNumber}>{stats.missedToday}</Text>
+            <Text style={styles.statNumber}>{todaysStats.missedToday}</Text>
             <Text style={styles.statLabel}>Missed Today</Text>
           </View>
           
-          <View style={[styles.statCard, { backgroundColor: '#e3f2fd' }]}>
+          <View style={[styles.statCard, { backgroundColor: colors.infoLight }]}>
             <View style={styles.statIconContainer}>
-              <Ionicons name={"medical" as any} size={24} color="#2196f3" />
+              <Ionicons name={"medical" as any} size={24} color={colors.info} />
             </View>
-            <Text style={styles.statNumber}>{stats.activeMedicines}</Text>
+            <Text style={styles.statNumber}>{todaysStats.activeMedicines}</Text>
             <Text style={styles.statLabel}>Active</Text>
           </View>
           
-          <View style={[styles.statCard, { backgroundColor: '#f3e5f5' }]}>
+          <View style={[styles.statCard, { backgroundColor: colors.primaryLight }]}>
             <View style={styles.statIconContainer}>
-              <Ionicons name={"list" as any} size={24} color="#9c27b0" />
+              <Ionicons name={"list" as any} size={24} color={colors.primary} />
             </View>
-            <Text style={styles.statNumber}>{stats.totalMedicines}</Text>
+            <Text style={styles.statNumber}>{todaysStats.totalMedicines}</Text>
             <Text style={styles.statLabel}>Total</Text>
           </View>
         </View>
@@ -261,38 +157,38 @@ export default function Profile() {
       <View style={styles.lifetimeContainer}>
         <Text style={styles.sectionTitle}>Lifetime Metrics</Text>
         <View style={styles.lifetimeGrid}>
-          <View style={[styles.lifetimeCard, { backgroundColor: '#e8f8f5' }]}>
+          <View style={[styles.lifetimeCard, { backgroundColor: colors.successLight }]}>
             <View style={styles.lifetimeIconContainer}>
-              <Ionicons name={"trophy" as any} size={28} color="#27ae60" />
+              <Ionicons name={"trophy" as any} size={28} color={colors.success} />
             </View>
-            <Text style={styles.lifetimeNumber}>{stats.totalTakenCount}</Text>
+            <Text style={styles.lifetimeNumber}>{stats.totalTaken}</Text>
             <Text style={styles.lifetimeLabel}>Total Taken</Text>
             <Text style={styles.lifetimeSubtext}>All time</Text>
           </View>
           
-          <View style={[styles.lifetimeCard, { backgroundColor: '#fef9e7' }]}>
+          <View style={[styles.lifetimeCard, { backgroundColor: colors.warningLight }]}>
             <View style={styles.lifetimeIconContainer}>
-              <Ionicons name={"analytics" as any} size={28} color="#f39c12" />
+              <Ionicons name={"analytics" as any} size={28} color={colors.warning} />
             </View>
-            <Text style={styles.lifetimeNumber}>{stats.complianceRate}%</Text>
+            <Text style={styles.lifetimeNumber}>{Math.round(stats.complianceRate)}%</Text>
             <Text style={styles.lifetimeLabel}>Compliance</Text>
             <Text style={styles.lifetimeSubtext}>Success rate</Text>
           </View>
         </View>
         
         <View style={styles.lifetimeGrid}>
-          <View style={[styles.lifetimeCard, { backgroundColor: '#e3f2fd' }]}>
+          <View style={[styles.lifetimeCard, { backgroundColor: colors.infoLight }]}>
             <View style={styles.lifetimeIconContainer}>
-              <Ionicons name={"calendar" as any} size={28} color="#2196f3" />
+              <Ionicons name={"calendar" as any} size={28} color={colors.info} />
             </View>
             <Text style={styles.lifetimeNumber}>{stats.totalDaysTracked}</Text>
             <Text style={styles.lifetimeLabel}>Days Tracked</Text>
             <Text style={styles.lifetimeSubtext}>Total active days</Text>
           </View>
           
-          <View style={[styles.lifetimeCard, { backgroundColor: '#f3e5f5' }]}>
+          <View style={[styles.lifetimeCard, { backgroundColor: colors.primaryLight }]}>
             <View style={styles.lifetimeIconContainer}>
-              <Ionicons name={"flame" as any} size={28} color="#e91e63" />
+              <Ionicons name={"flame" as any} size={28} color={colors.primary} />
             </View>
             <Text style={styles.lifetimeNumber}>{stats.longestStreak}</Text>
             <Text style={styles.lifetimeLabel}>Best Streak</Text>
@@ -302,14 +198,14 @@ export default function Profile() {
 
         {/* Current Streak Card - Full Width */}
         <View style={styles.currentStreakContainer}>
-          <View style={[styles.currentStreakCard, { backgroundColor: stats.currentStreak > 0 ? '#e8f5e8' : '#f5f5f5' }]}>
+          <View style={[styles.currentStreakCard, { backgroundColor: stats.currentStreak > 0 ? colors.successLight : colors.surface }]}>
             <View style={styles.currentStreakContent}>
               <View style={styles.currentStreakLeft}>
                 <View style={styles.currentStreakIconContainer}>
                   <Ionicons 
                     name={stats.currentStreak > 0 ? "flame" as any : "flame-outline" as any} 
                     size={32} 
-                    color={stats.currentStreak > 0 ? "#27ae60" : "#bdc3c7"} 
+                    color={stats.currentStreak > 0 ? colors.success : colors.textTertiary} 
                   />
                 </View>
                 <View style={styles.currentStreakInfo}>
@@ -325,10 +221,10 @@ export default function Profile() {
                 </View>
               </View>
               <View style={styles.currentStreakRight}>
-                <Text style={[styles.currentStreakNumber, { color: stats.currentStreak > 0 ? "#27ae60" : "#bdc3c7" }]}>
+                <Text style={[styles.currentStreakNumber, { color: stats.currentStreak > 0 ? colors.success : colors.textTertiary }]}>
                   {stats.currentStreak}
                 </Text>
-                <Text style={[styles.currentStreakUnit, { color: stats.currentStreak > 0 ? "#27ae60" : "#bdc3c7" }]}>
+                <Text style={[styles.currentStreakUnit, { color: stats.currentStreak > 0 ? colors.success : colors.textTertiary }]}>
                   days
                 </Text>
               </View>
@@ -346,7 +242,7 @@ export default function Profile() {
             onPress={() => router.push('/(tabs)/AddNew')}
           >
             <View style={styles.actionIconContainer}>
-              <Ionicons name={"add-circle" as any} size={32} color={Colors.PRIMARY} />
+              <Ionicons name={"add-circle" as any} size={32} color={colors.primary} />
             </View>
             <Text style={styles.actionTitle}>Add Medicine</Text>
             <Text style={styles.actionSubtitle}>Track new medication</Text>
@@ -357,7 +253,7 @@ export default function Profile() {
             onPress={() => router.push('/MedicineList')}
           >
             <View style={styles.actionIconContainer}>
-              <Ionicons name={"list-circle" as any} size={32} color="#ff9800" />
+              <Ionicons name={"list-circle" as any} size={32} color={colors.secondary} />
             </View>
             <Text style={styles.actionTitle}>Manage All</Text>
             <Text style={styles.actionSubtitle}>View & edit medicines</Text>
@@ -371,41 +267,41 @@ export default function Profile() {
         
         <TouchableOpacity style={styles.settingItem}>
           <View style={styles.settingLeft}>
-            <View style={[styles.settingIcon, { backgroundColor: '#e3f2fd' }]}>
-              <Ionicons name={"person-circle" as any} size={24} color="#2196f3" />
+            <View style={[styles.settingIcon, { backgroundColor: colors.infoLight }]}>
+              <Ionicons name={"person-circle" as any} size={24} color={colors.info} />
             </View>
             <View style={styles.settingInfo}>
               <Text style={styles.settingTitle}>Profile Settings</Text>
               <Text style={styles.settingSubtitle}>Update your information</Text>
             </View>
           </View>
-          <Ionicons name={"chevron-forward" as any} size={20} color="#bdc3c7" />
+          <Ionicons name={"chevron-forward" as any} size={20} color={colors.textTertiary} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.settingItem}>
           <View style={styles.settingLeft}>
-            <View style={[styles.settingIcon, { backgroundColor: '#e8f5e8' }]}>
-              <Ionicons name={"notifications" as any} size={24} color="#27ae60" />
+            <View style={[styles.settingIcon, { backgroundColor: colors.successLight }]}>
+              <Ionicons name={"notifications" as any} size={24} color={colors.success} />
             </View>
             <View style={styles.settingInfo}>
               <Text style={styles.settingTitle}>Notifications</Text>
               <Text style={styles.settingSubtitle}>Manage reminders</Text>
             </View>
           </View>
-          <Ionicons name={"chevron-forward" as any} size={20} color="#bdc3c7" />
+          <Ionicons name={"chevron-forward" as any} size={20} color={colors.textTertiary} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.settingItem}>
           <View style={styles.settingLeft}>
-            <View style={[styles.settingIcon, { backgroundColor: '#fff3e0' }]}>
-              <Ionicons name={"help-circle" as any} size={24} color="#ff9800" />
+            <View style={[styles.settingIcon, { backgroundColor: colors.warningLight }]}>
+              <Ionicons name={"help-circle" as any} size={24} color={colors.warning} />
             </View>
             <View style={styles.settingInfo}>
               <Text style={styles.settingTitle}>Help & Support</Text>
               <Text style={styles.settingSubtitle}>Get assistance</Text>
             </View>
           </View>
-          <Ionicons name={"chevron-forward" as any} size={20} color="#bdc3c7" />
+          <Ionicons name={"chevron-forward" as any} size={20} color={colors.textTertiary} />
         </TouchableOpacity>
       </View>
 
@@ -425,20 +321,16 @@ export default function Profile() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: colors.background,
   },
   header: {
-    backgroundColor: Colors.PRIMARY,
+    backgroundColor: colors.primary,
     paddingTop: 60,
-    paddingBottom: 30,
-    paddingHorizontal: 20,
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.lg,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
+    ...shadows.lg,
   },
   headerContent: {
     alignItems: 'center',
@@ -450,20 +342,16 @@ const styles = StyleSheet.create({
   },
   avatarContainer: {
     position: 'relative',
-    marginRight: 20,
+    marginRight: spacing.lg,
   },
   avatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'white',
+    backgroundColor: colors.textInverse,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+    ...shadows.md,
   },
   statusIndicator: {
     position: 'absolute',
@@ -472,24 +360,24 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#27ae60',
+    backgroundColor: colors.success,
     borderWidth: 3,
-    borderColor: 'white',
+    borderColor: colors.textInverse,
   },
   userInfo: {
     flex: 1,
   },
   userName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 5,
+    fontSize: theme.typography.fontSize.xxl,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: colors.textInverse,
+    marginBottom: spacing.xs,
   },
   userEmail: {
-    fontSize: 16,
-    color: 'white',
+    fontSize: theme.typography.fontSize.md,
+    color: colors.textInverse,
     opacity: 0.9,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   userStatus: {
     flexDirection: 'row',
@@ -499,22 +387,22 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#27ae60',
-    marginRight: 6,
+    backgroundColor: colors.success,
+    marginRight: spacing.xs,
   },
   statusText: {
-    fontSize: 14,
-    color: 'white',
+    fontSize: theme.typography.fontSize.sm,
+    color: colors.textInverse,
     opacity: 0.9,
   },
   statsContainer: {
-    padding: 20,
+    padding: spacing.lg,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 15,
+    fontSize: theme.typography.fontSize.lg,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -523,86 +411,74 @@ const styles = StyleSheet.create({
   },
   statCard: {
     width: '48%',
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: colors.textInverse,
+    borderRadius: theme.borderRadius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...shadows.sm,
   },
   statIconContainer: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   statNumber: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 4,
+    fontSize: theme.typography.fontSize.xxxl,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   statLabel: {
-    fontSize: 12,
-    color: '#7f8c8d',
+    fontSize: theme.typography.fontSize.xs,
+    color: colors.textSecondary,
     textAlign: 'center',
-    fontWeight: '600',
+    fontWeight: theme.typography.fontWeight.semibold,
   },
   lifetimeContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
   },
   lifetimeGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: spacing.sm,
   },
   lifetimeCard: {
     width: '48%',
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: colors.textInverse,
+    borderRadius: theme.borderRadius.lg,
+    padding: spacing.md,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...shadows.sm,
   },
   lifetimeIconContainer: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   lifetimeNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 4,
+    fontSize: theme.typography.fontSize.xxl,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   lifetimeLabel: {
-    fontSize: 12,
-    color: '#2c3e50',
+    fontSize: theme.typography.fontSize.xs,
+    color: colors.text,
     textAlign: 'center',
-    fontWeight: 'bold',
+    fontWeight: theme.typography.fontWeight.bold,
     marginBottom: 2,
   },
   lifetimeSubtext: {
     fontSize: 10,
-    color: '#7f8c8d',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   currentStreakContainer: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   currentStreakCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: colors.textInverse,
+    borderRadius: theme.borderRadius.lg,
+    padding: spacing.lg,
+    ...shadows.sm,
   },
   currentStreakContent: {
     flexDirection: 'row',
@@ -615,37 +491,37 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   currentStreakIconContainer: {
-    marginRight: 16,
+    marginRight: spacing.md,
   },
   currentStreakInfo: {
     flex: 1,
   },
   currentStreakTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 4,
+    fontSize: theme.typography.fontSize.md,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   currentStreakSubtitle: {
-    fontSize: 12,
-    color: '#7f8c8d',
+    fontSize: theme.typography.fontSize.xs,
+    color: colors.textSecondary,
     lineHeight: 16,
   },
   currentStreakRight: {
     alignItems: 'center',
   },
   currentStreakNumber: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: theme.typography.fontSize.xxxl,
+    fontWeight: theme.typography.fontWeight.bold,
     marginBottom: 2,
   },
   currentStreakUnit: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: theme.typography.fontSize.xs,
+    fontWeight: theme.typography.fontWeight.semibold,
   },
   actionsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
   },
   actionsGrid: {
     flexDirection: 'row',
@@ -653,48 +529,40 @@ const styles = StyleSheet.create({
   },
   actionCard: {
     width: '48%',
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
+    backgroundColor: colors.textInverse,
+    borderRadius: theme.borderRadius.lg,
+    padding: spacing.lg,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...shadows.sm,
   },
   actionIconContainer: {
-    marginBottom: 12,
+    marginBottom: spacing.sm,
   },
   actionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 4,
+    fontSize: theme.typography.fontSize.md,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: colors.text,
+    marginBottom: spacing.xs,
     textAlign: 'center',
   },
   actionSubtitle: {
-    fontSize: 12,
-    color: '#7f8c8d',
+    fontSize: theme.typography.fontSize.xs,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   settingsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
   },
   settingItem: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
+    backgroundColor: colors.textInverse,
+    borderRadius: theme.borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    ...shadows.sm,
   },
   settingLeft: {
     flexDirection: 'row',
@@ -707,44 +575,40 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: spacing.sm,
   },
   settingInfo: {
     flex: 1,
   },
   settingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2c3e50',
+    fontSize: theme.typography.fontSize.md,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: colors.text,
     marginBottom: 2,
   },
   settingSubtitle: {
-    fontSize: 12,
-    color: '#7f8c8d',
+    fontSize: theme.typography.fontSize.xs,
+    color: colors.textSecondary,
   },
   logoutContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xl,
   },
   logoutButton: {
-    backgroundColor: '#e74c3c',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: colors.error,
+    borderRadius: theme.borderRadius.md,
+    padding: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#e74c3c',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    ...shadows.md,
   },
   logoutIconContainer: {
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   logoutButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: colors.textInverse,
+    fontSize: theme.typography.fontSize.md,
+    fontWeight: theme.typography.fontWeight.bold,
   },
 })

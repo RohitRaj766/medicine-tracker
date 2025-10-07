@@ -7,6 +7,29 @@ import {
   getTimesString 
 } from './dateUtils'
 
+// Date utility functions
+export const getMonthDates = (year: number, month: number): Date[] => {
+  const dates = []
+  const lastDay = new Date(year, month + 1, 0)
+  
+  for (let day = 1; day <= lastDay.getDate(); day++) {
+    dates.push(new Date(year, month, day))
+  }
+  
+  return dates
+}
+
+export const hasMedicinesOnDate = (medicines: Medicine[], date: Date): boolean => {
+  return medicines.some(med => {
+    if (med.startDate && med.endDate) {
+      const startDate = new Date(med.startDate)
+      const endDate = new Date(med.endDate)
+      return date >= startDate && date <= endDate
+    }
+    return false
+  })
+}
+
 // Medicine filtering utilities
 export const filterMedicinesByDate = (medicines: Medicine[], date: Date): Medicine[] => {
   const dateString = formatDate(date)

@@ -1,6 +1,8 @@
 import { TextStyle, ViewStyle } from 'react-native'
 
 // Medicine related types
+export type MedicineStatus = 'taken' | 'missed' | 'pending' | 'edited'
+
 export interface Medicine {
   id: string
   medicineName: string
@@ -104,6 +106,8 @@ export interface UseMedicinesReturn {
   markAsTaken: (medicineId: string, date: Date) => Promise<boolean>
   markAsMissed: (medicineId: string, date: Date) => Promise<boolean>
   deleteMedicine: (medicineId: string) => Promise<boolean>
+  updateMedicine: (updatedMedicine: Medicine) => Promise<boolean>
+  addMedicine: (newMedicine: Medicine) => Promise<boolean>
 }
 
 // Theme types

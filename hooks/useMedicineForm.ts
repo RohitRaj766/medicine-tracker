@@ -216,7 +216,7 @@ export function useMedicineForm(initialData?: Partial<MedicineFormData>): UseMed
 export function useEditMedicineForm(medicine: Medicine): UseMedicineFormReturn {
   const [initialFormData] = useState<MedicineFormData>(() => {
     // Parse existing medicine data into form format
-    const selectedTimes: (Date | undefined)[] = []
+    const selectedTimes: Date[] = []
     
     if (medicine.time) {
       if (medicine.time.includes(',')) {

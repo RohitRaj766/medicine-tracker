@@ -14,18 +14,20 @@ import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 
 // Modular imports
-import MedicineCard from '@/components/MedicineCard'
-import { useMedicines, useFilteredMedicines } from '@/hooks'
+import { MedicineCard } from '@/components'
+import { useMedicines, useFilteredMedicines, useMedicineStats } from '@/hooks'
 import { theme, colors, spacing, shadows } from '@/styles/theme'
 import { Medicine } from '@/types'
 import { formatDateDisplay, isToday as checkIsToday } from '@/utils/dateUtils'
+import { getMonthDates, hasMedicinesOnDate } from '@/utils/medicineUtils'
 
 const { width: screenWidth } = Dimensions.get('window')
 
 export default function HomeScreen() {
   const router = useRouter()
-  const { medicines, isLoading, loadMedicines, error } = useMedicines()
+  const { medicines, isLoading, loadMedicines, error, addMedicine } = useMedicines()
   const { filteredMedicines, selectedDate, setDate } = useFilteredMedicines()
+  const stats = useMedicineStats()
   
   // Debug logging
   console.log('HomeScreen - medicines:', medicines.length)
@@ -34,12 +36,39 @@ export default function HomeScreen() {
   console.log('HomeScreen - isLoading:', isLoading)
   console.log('HomeScreen - error:', error)
   
-  // Test: Add a sample medicine if none exist
+  // Add sample data for testing when no medicines exist
   useEffect(() => {
-    if (medicines.length === 0 && !isLoading) {
-      console.log('No medicines found, this might be why MedicineCard is not showing')
+    const addSampleData = async () => {
+      if (medicines.length === 0 && !isLoading && !error) {
+        console.log('No medicines found, adding sample data for testing...')
+        
+        const sampleMedicine = {
+          id: 'sample-1',
+          medicineName: 'Paracetamol',
+          dosage: '500mg',
+          medicineType: 'Pain Relief',
+          frequency: 'Twice daily',
+          duration: '7',
+          startDate: new Date().toISOString().split('T')[0],
+          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          time: '9:00 AM, 9:00 PM',
+          notes: 'Take with food',
+          createdAt: new Date().toISOString(),
+          consumedDates: [],
+          missedDates: []
+        }
+        
+        try {
+          await addMedicine(sampleMedicine)
+          console.log('Sample medicine added successfully')
+        } catch (err) {
+          console.log('Failed to add sample medicine:', err)
+        }
+      }
     }
-  }, [medicines, isLoading])
+    
+    addSampleData()
+  }, [medicines, isLoading, error, addMedicine])
   
   // State management
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth())
@@ -95,17 +124,7 @@ export default function HomeScreen() {
   }
 
   // Date utilities
-  const getMonthDates = () => {
-    const dates = []
-    const firstDay = new Date(currentYear, currentMonth, 1)
-    const lastDay = new Date(currentYear, currentMonth + 1, 0)
-    
-    for (let day = 1; day <= lastDay.getDate(); day++) {
-      dates.push(new Date(currentYear, currentMonth, day))
-    }
-    
-    return dates
-  }
+  const monthDates = getMonthDates(currentYear, currentMonth)
 
   const isSelectedDate = (date: Date) => {
     const date1 = new Date(date.getFullYear(), date.getMonth(), date.getDate())
@@ -120,16 +139,6 @@ export default function HomeScreen() {
     return checkDate.getTime() === today.getTime()
   }
 
-  const hasMedicinesOnDate = (date: Date) => {
-    return medicines.some(med => {
-      if (med.startDate && med.endDate) {
-        const startDate = new Date(med.startDate)
-        const endDate = new Date(med.endDate)
-        return date >= startDate && date <= endDate
-      }
-      return false
-    })
-  }
 
   const handleDateSelect = (date: Date) => {
     setDate(date)
@@ -184,6 +193,7 @@ export default function HomeScreen() {
     return 'Good Evening'
   }
 
+  // Get today's specific stats
   const getTodaysStats = () => {
     const today = new Date()
     const todayString = today.toISOString().split('T')[0]
@@ -201,8 +211,7 @@ export default function HomeScreen() {
     return { takenToday, missedToday, pendingToday }
   }
 
-  const stats = getTodaysStats()
-  const monthDates = getMonthDates()
+  const todaysStats = getTodaysStats()
   const monthYearOptions = getMonthYearOptions()
 
   if (isLoading) {
@@ -256,7 +265,19 @@ export default function HomeScreen() {
             }
           ]}
         >
-
+          {/* Header Section */}
+          <View style={styles.headerSection}>
+            <Text style={styles.greeting}>{getGreeting()}</Text>
+            <Text style={styles.userName}>{user?.displayName || 'User'}</Text>
+            <Text style={styles.dateDisplay}>
+              {selectedDate.toLocaleDateString('en-US', { 
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric'
+              })}
+            </Text>
+          </View>
 
           {/* Today's Stats */}
         <View style={styles.statsContainer}>
@@ -264,17 +285,17 @@ export default function HomeScreen() {
           <View style={styles.statsGrid}>
             <View style={[styles.statCard, styles.takenCard]}>
               <Ionicons name={"checkmark-circle" as any} size={24} color={colors.success} />
-              <Text style={styles.statNumber}>{stats.takenToday}</Text>
+              <Text style={styles.statNumber}>{todaysStats.takenToday}</Text>
               <Text style={styles.statLabel}>Taken</Text>
             </View>
             <View style={[styles.statCard, styles.missedCard]}>
               <Ionicons name={"close-circle" as any} size={24} color={colors.error} />
-              <Text style={styles.statNumber}>{stats.missedToday}</Text>
+              <Text style={styles.statNumber}>{todaysStats.missedToday}</Text>
               <Text style={styles.statLabel}>Missed</Text>
             </View>
             <View style={[styles.statCard, styles.pendingCard]}>
               <Ionicons name={"time" as any} size={24} color={colors.warning} />
-              <Text style={styles.statNumber}>{stats.pendingToday}</Text>
+              <Text style={styles.statNumber}>{todaysStats.pendingToday}</Text>
               <Text style={styles.statLabel}>Pending</Text>
             </View>
           </View>
@@ -286,7 +307,7 @@ export default function HomeScreen() {
             <Text style={styles.calendarTitle}>Calendar</Text>
             <View style={styles.headerActions}>
               <TouchableOpacity style={styles.todayButton} onPress={goToToday}>
-                <Ionicons name={"today" as any} size={16} color="white" />
+                <Ionicons name={"today" as any} size={16} color={colors.textInverse} />
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.monthYearButton}
@@ -312,7 +333,7 @@ export default function HomeScreen() {
               }
               const selected = isSelectedDate(date)
               const isTodayDate = isToday(date)
-              const hasMedicines = hasMedicinesOnDate(date)
+              const hasMedicines = hasMedicinesOnDate(medicines, date)
               
               return (
                 <TouchableOpacity
@@ -373,7 +394,7 @@ export default function HomeScreen() {
               style={styles.addButton}
               onPress={() => router.push('/(tabs)/AddNew')}
             >
-              <Ionicons name={"add" as any} size={20} color="white" />
+              <Ionicons name={"add" as any} size={20} color={colors.textInverse} />
             </TouchableOpacity>
           </View>
 
@@ -387,7 +408,13 @@ export default function HomeScreen() {
                   : "No medicines scheduled for this date"
                 }
               </Text>
-
+              <TouchableOpacity 
+                style={styles.emptyActionButton}
+                onPress={() => router.push('/(tabs)/AddNew')}
+              >
+                <Ionicons name={"add-circle" as any} size={20} color={colors.textInverse} />
+                <Text style={styles.emptyActionText}>Add Medicine</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.medicinesList}>
@@ -525,7 +552,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   retryButtonText: {
-    color: colors.white,
+    color: colors.textInverse,
     fontSize: theme.typography.fontSize.md,
     fontWeight: theme.typography.fontWeight.semibold,
     textAlign: 'center',
@@ -534,6 +561,27 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
+  },
+  headerSection: {
+    marginBottom: spacing.xl,
+    paddingVertical: spacing.lg,
+  },
+  greeting: {
+    fontSize: theme.typography.fontSize.xl,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  userName: {
+    fontSize: theme.typography.fontSize.xxl,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: colors.primary,
+    marginBottom: spacing.sm,
+  },
+  dateDisplay: {
+    fontSize: theme.typography.fontSize.md,
+    color: colors.textSecondary,
+    fontWeight: theme.typography.fontWeight.medium,
   },
 
   statsContainer: {
@@ -551,7 +599,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
     borderRadius: theme.borderRadius.lg,
     padding: spacing.md,
     alignItems: 'center',
@@ -610,7 +658,7 @@ const styles = StyleSheet.create({
     ...shadows.sm,
   },
   todayButtonText: {
-    color: 'white',
+    color: colors.textInverse,
     fontSize: theme.typography.fontSize.sm,
     fontWeight: theme.typography.fontWeight.semibold,
     marginLeft: spacing.xs,
@@ -671,7 +719,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   selectedDateText: {
-    color: 'white',
+    color: colors.textInverse,
   },
   hasMedicinesText: {
     color: colors.success,
@@ -697,7 +745,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
   },
   selectedIndicator: {
-    backgroundColor: 'white',
+    backgroundColor: colors.textInverse,
   },
   medicinesSection: {
     flex: 1,
@@ -724,7 +772,7 @@ const styles = StyleSheet.create({
     ...shadows.sm,
   },
   addButtonText: {
-    color: 'white',
+    color: colors.textInverse,
     fontSize: theme.typography.fontSize.sm,
     fontWeight: theme.typography.fontWeight.semibold,
     marginLeft: spacing.xs,
@@ -767,7 +815,7 @@ const styles = StyleSheet.create({
     ...shadows.md,
   },
   emptyActionText: {
-    color: 'white',
+    color: colors.textInverse,
     fontSize: theme.typography.fontSize.md,
     fontWeight: theme.typography.fontWeight.semibold,
     marginLeft: spacing.sm,
