@@ -1,0 +1,75 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  displayName   String?
+  photoURL      String?
+  emailVerified Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+
+  // Relations
+  medicines     Medicine[]
+  medicineLogs  MedicineLog[]
+
+  @@map("users")
+}
+
+model Medicine {
+  id              String    @id @default(cuid())
+  userId          String
+  medicineName    String
+  dosage          String
+  medicineType    String?
+  frequency       String
+  duration        String?
+  startDate       DateTime
+  endDate         DateTime
+  time            String?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicineLogs    MedicineLog[]
+
+  @@map("medicines")
+}
+
+model MedicineLog {
+  id          String    @id @default(cuid())
+  userId      String
+  medicineId  String
+  date        DateTime
+  status      MedicineStatus
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicine    Medicine  @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, medicineId, date])
+  @@map("medicine_logs")
+}
+
+enum MedicineStatus {
+  TAKEN
+  MISSED
+  PENDING
+  EDITED
+}
